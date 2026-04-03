@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint backend
+        run: pnpm --filter @skyops/api lint
+
+      - name: Build backend
+        run: pnpm --filter @skyops/api build
+
+      - name: Run backend unit tests
+        run: pnpm --filter @skyops/api exec jest --runInBand
+
+      - name: Run backend integration tests
+        run: pnpm --filter @skyops/api exec jest --config ./test/jest-e2e.json --runInBand
+
+      - name: Lint frontend
+        run: pnpm --filter @skyops/web lint
+
+      - name: Build frontend
+        run: pnpm --filter @skyops/web build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @skyops/web exec playwright install --with-deps chromium
+
+      - name: Run frontend end-to-end tests
+        run: pnpm --filter @skyops/web test:e2e
