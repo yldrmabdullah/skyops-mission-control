@@ -111,6 +111,8 @@ export function SignInPage() {
               onChange={(event) => setPassword(event.target.value)}
             />
             <button
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
               className="button ghost password-toggle"
               type="button"
               onClick={() => setShowPassword((current) => !current)}
