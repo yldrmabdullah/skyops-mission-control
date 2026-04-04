@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  assertOrderedDateRangeOrThrow,
+  parseIsoDateOrThrow,
+} from '../common/utils/date.utils';
 import { buildPaginationMeta } from '../common/utils/pagination';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
 import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
@@ -55,7 +59,10 @@ export class MaintenanceService {
       );
     }
 
-    const performedAt = new Date(createMaintenanceLogDto.performedAt);
+    const performedAt = parseIsoDateOrThrow(
+      createMaintenanceLogDto.performedAt,
+      'Performed at',
+    );
 
     const maintenanceLog = this.maintenanceLogsRepository.create({
       ...createMaintenanceLogDto,
@@ -79,6 +86,15 @@ export class MaintenanceService {
   }
 
   async findAll(query: ListMaintenanceLogsQueryDto, ownerId: string) {
+    if (query.startDate && query.endDate) {
+      assertOrderedDateRangeOrThrow(
+        parseIsoDateOrThrow(query.startDate, 'startDate'),
+        parseIsoDateOrThrow(query.endDate, 'endDate'),
+        'startDate',
+        'endDate',
+      );
+    }
+
     const queryBuilder = this.maintenanceLogsRepository
       .createQueryBuilder('maintenanceLog')
       .leftJoinAndSelect('maintenanceLog.drone', 'drone')
@@ -95,13 +111,13 @@ export class MaintenanceService {
 
     if (query.startDate) {
       queryBuilder.andWhere('maintenanceLog.performedAt >= :startDate', {
-        startDate: new Date(query.startDate),
+        startDate: parseIsoDateOrThrow(query.startDate, 'startDate'),
       });
     }
 
     if (query.endDate) {
       queryBuilder.andWhere('maintenanceLog.performedAt <= :endDate', {
-        endDate: new Date(query.endDate),
+        endDate: parseIsoDateOrThrow(query.endDate, 'endDate'),
       });
     }
 
