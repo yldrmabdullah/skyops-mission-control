@@ -2,6 +2,8 @@
 
 React + Vite dashboard for SkyOps Mission Control (fleet registry, missions, maintenance, dashboard).
 
+**Docs:** Start from the monorepo [README.md](../../README.md). Production UI (when deployed): [https://skyops-mission-control-web.onrender.com](https://skyops-mission-control-web.onrender.com/).
+
 ## Run from the monorepo root
 
 See the root [README.md](../../README.md) for environment variables, `pnpm dev`, Docker, and Playwright e2e.

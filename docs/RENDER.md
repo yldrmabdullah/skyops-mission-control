@@ -1,17 +1,21 @@
 # Deploying on Render
 
+**How to use this doc:** Open it when you deploy with Blueprints, set **`VITE_API_BASE_URL`**, interpret **`DATABASE_URL`**, or troubleshoot OOM / static-site plan issues. High-level onboarding stays in the root [README.md](../README.md).
+
 This repo is set up for [Render Blueprints](https://render.com/docs/infrastructure-as-code) using [`render.yaml`](../render.yaml) (production, branch **`master`**) and [`render.dev.yaml`](../render.dev.yaml) (staging, branch **`dev`**).
 
-## Production URLs
+## Production (live)
 
-After the first deploy, open each service in the Render dashboard and copy its **onrender.com** hostname. Defaults in `render.yaml` assume:
+These are the **current** public URLs for this project’s production Blueprint (confirm in your Render dashboard if you renamed services):
 
-| Service        | Typical URL pattern                               |
-| -------------- | ------------------------------------------------- |
-| API (Web)      | `https://skyops-mission-control-api.onrender.com` |
-| Frontend (CDN) | `https://skyops-mission-control-web.onrender.com` |
+| Resource  | URL                                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Dashboard | [https://skyops-mission-control-web.onrender.com](https://skyops-mission-control-web.onrender.com/)                      |
+| API base  | `https://skyops-mission-control-api.onrender.com`                                                                        |
+| Health    | [https://skyops-mission-control-api.onrender.com/api/health](https://skyops-mission-control-api.onrender.com/api/health) |
+| Swagger   | [https://skyops-mission-control-api.onrender.com/docs](https://skyops-mission-control-api.onrender.com/docs)             |
 
-If Render assigns a different slug, update configuration to match (see below).
+If Render assigns a **different** hostname, update **`VITE_API_BASE_URL`** on the static site and trigger a **new deploy** so the SPA bundle points at the correct API. Always double-check hostnames in the Render dashboard after provisioning.
 
 ## API Web Service — environment
 

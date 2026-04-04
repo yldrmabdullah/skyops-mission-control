@@ -1,5 +1,7 @@
 # Git branching and deployment
 
+**How to use this doc:** Read it when you need branch names, daily git commands, or the path from **`dev`** → **`master`** for Render production. For environment variables and Render URLs, see [RENDER.md](./RENDER.md). For the full project picture, see the root [README.md](../README.md).
+
 This repository uses a **two long-lived branch** model so **Render (and similar) can track a stable production branch** while day-to-day work lands on **`dev`**.
 
 ## Long-lived branches
