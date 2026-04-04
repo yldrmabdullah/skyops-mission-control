@@ -1,14 +1,15 @@
+# Staging / preview: deploy from `dev` (separate DB and URLs from production).
+# In Render: create a second Blueprint and point it at this file, or import manually.
 databases:
-  - name: skyops-db
-    databaseName: skyops
+  - name: skyops-db-dev
+    databaseName: skyops_dev
     user: skyops
     plan: free
 
-# Production: deploy from `master` (Render watches this branch).
 services:
   - type: web
-    name: skyops-mission-control-api
-    branch: master
+    name: skyops-mission-control-api-dev
+    branch: dev
     runtime: node
     plan: free
     rootDir: .
@@ -18,7 +19,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: skyops-db
+          name: skyops-db-dev
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
@@ -28,10 +29,9 @@ services:
         value: 22
       - key: PORT
         value: 10000
-  # Static sites: do not set plan: free here — Render rejects it for runtime: static (use default / dashboard if needed).
   - type: web
-    name: skyops-mission-control-web
-    branch: master
+    name: skyops-mission-control-web-dev
+    branch: dev
     runtime: static
     rootDir: .
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @skyops/web build
@@ -39,8 +39,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22
+      # Must match your dev API service URL after first deploy (Render dashboard shows the hostname).
       - key: VITE_API_BASE_URL
-        value: https://skyops-mission-control-api.onrender.com/api
+        value: https://skyops-mission-control-api-dev.onrender.com/api
     routes:
       - type: rewrite
         source: /*
