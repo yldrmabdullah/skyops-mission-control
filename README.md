@@ -80,9 +80,10 @@ Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 ├── apps
 │   ├── api     # NestJS REST API (@skyops/api)
 │   └── web     # React dashboard (@skyops/web)
-├── docs        # e.g. BRANCHING.md
-├── scripts     # Local / CI helpers (e.g. e2e API + web startup)
-├── render.yaml
+├── docs            # e.g. BRANCHING.md
+├── scripts         # Local / CI helpers (e.g. e2e API + web startup)
+├── render.yaml     # Production Blueprint (branch: master)
+├── render.dev.yaml # Staging Blueprint (branch: dev)
 └── docker-compose.yml
 ```
 
@@ -156,7 +157,7 @@ Playwright uses a dedicated e2e user created by `scripts/start-e2e-api.sh` (not 
 
 ## Git workflow
 
-This repo uses a lightweight **GitHub Flow** model: long-lived `main`, short-lived `feature/*`, `fix/*`, and `chore/*` branches, merged via pull requests. See [docs/BRANCHING.md](docs/BRANCHING.md) for naming rules, daily commands, and optional GitHub branch protection.
+Integration happens on **`dev`**; **production** (including Render) tracks **`master`**. Short-lived `feature/*`, `fix/*`, and `chore/*` branches branch from `dev` and merge back via PR. Promote to production by merging `dev` → `master`. See [docs/BRANCHING.md](docs/BRANCHING.md) for commands, staging (`render.dev.yaml`), and branch protection tips.
 
 ## Prerequisites
 
@@ -322,9 +323,11 @@ GitHub Actions runs:
 
 Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
-## Free deployment
+## Free deployment (Render)
 
-The repository includes a Render Blueprint at [`render.yaml`](render.yaml).
+### Production (`master`)
+
+Blueprint: [`render.yaml`](render.yaml). Both web services set **`branch: master`** so Render deploys only when **`master`** updates.
 
 Provisioned services:
 
@@ -332,16 +335,19 @@ Provisioned services:
 - free Node web service for the API
 - free static site for the React dashboard
 
-### Deploy steps
+**Deploy steps**
 
-1. Push the repository to GitHub.
-2. In Render, create a new Blueprint instance from the repository.
-3. Render provisions the database and both services automatically.
-4. Once the API URL is live, configure the static frontend’s API base URL to match your deployed API (see Render env docs in the blueprint).
+1. Ensure **`master`** contains the commit you want in production (merge from `dev` when ready).
+2. In Render, create a Blueprint from this repo and select **`render.yaml`** (or the default blueprint path your team uses).
+3. Render provisions the database and services. If the API hostname differs from the example, set **`VITE_API_BASE_URL`** on the static site to `https://<your-api-service>.onrender.com/api`.
 
-Health check endpoint:
+Health check: `GET /api/health`
 
-- `GET /api/health`
+**Blueprint note:** Render may reject `plan: free` on services with `runtime: static`. The repo’s `render.yaml` omits `plan` for the frontend static site so the Blueprint validates; if the dashboard shows a paid instance type, switch that static site to the free/static-appropriate tier there.
+
+### Staging (`dev`)
+
+Blueprint: [`render.dev.yaml`](render.dev.yaml). Uses **`branch: dev`** and separate service names plus a **dev database** so staging does not touch production data. Create a **second** Blueprint in Render pointing at `render.dev.yaml`, then verify **`VITE_API_BASE_URL`** matches the dev API URL shown in the dashboard after the first deploy.
 
 ## Demo walkthrough suggestion
 
