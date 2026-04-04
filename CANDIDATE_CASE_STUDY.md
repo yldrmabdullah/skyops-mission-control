@@ -1,6 +1,6 @@
 # Full-Stack Case Study: Drone Fleet Mission Control & Maintenance Tracker
 
-This document is the **original requirements brief** for the exercise. For the **implemented application** (features, tech stack, how to run locally, Docker, tests, and deployment), use the repository root **[README.md](README.md)**.
+This document is the **original requirements brief** for the exercise. For the **implemented application** (features, tech stack, how to run locally, Docker, tests, and deployment), use the repository root **[README.md](README.md)** — including the **live Render demo** links at the top of that file.
 
 ## Context
 
