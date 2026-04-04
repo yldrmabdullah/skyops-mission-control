@@ -1,6 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Mission } from '../../missions/entities/mission.entity';
-import { MissionStatus } from '../../missions/entities/mission.entity';
 import { DroneStatus, type Drone } from '../entities/drone.entity';
 import { isMaintenanceDue } from './maintenance.utils';
 
@@ -15,14 +14,10 @@ export function assertValidFlightHoursSnapshot(
   }
 }
 
-export function assertDroneCanBeRetired(upcomingMission: Mission | null) {
-  if (
-    upcomingMission &&
-    upcomingMission.status !== MissionStatus.COMPLETED &&
-    upcomingMission.status !== MissionStatus.ABORTED
-  ) {
+export function assertDroneCanBeRetired(activeMission: Mission | null) {
+  if (activeMission) {
     throw new BadRequestException(
-      'A drone with upcoming scheduled missions cannot be retired.',
+      'Cannot retire a drone that has planned, pre-flight, or in-progress missions.',
     );
   }
 }

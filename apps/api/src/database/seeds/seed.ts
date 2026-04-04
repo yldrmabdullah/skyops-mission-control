@@ -77,8 +77,11 @@ async function seed() {
         totalFlightHours,
         flightHoursAtLastMaintenance,
         lastMaintenanceDate,
-        nextMaintenanceDueDate:
-          calculateNextMaintenanceDueDate(lastMaintenanceDate),
+        nextMaintenanceDueDate: calculateNextMaintenanceDueDate(
+          lastMaintenanceDate,
+          totalFlightHours,
+          flightHoursAtLastMaintenance,
+        ),
       });
     }),
   );

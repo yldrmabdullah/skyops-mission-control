@@ -1,5 +1,7 @@
 # Full-Stack Case Study: Drone Fleet Mission Control & Maintenance Tracker
 
+This document is the **original requirements brief** for the exercise. For the **implemented application** (features, tech stack, how to run locally, Docker, tests, and deployment), use the repository root **[README.md](README.md)**.
+
 ## Context
 
 **Company:** SkyOps Ltd. -- a commercial drone services company providing aerial inspection services for wind turbines, solar farms, and power lines across Europe.

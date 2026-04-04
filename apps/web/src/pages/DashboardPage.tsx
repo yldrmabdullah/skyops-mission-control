@@ -71,7 +71,15 @@ export function DashboardPage() {
       const dueDate = new Date(drone.nextMaintenanceDueDate);
       const threshold = new Date(referenceNow);
       threshold.setUTCDate(threshold.getUTCDate() + 7);
-      return dueDate.getTime() <= threshold.getTime();
+      const inHorizon = dueDate.getTime() <= threshold.getTime();
+      const hoursSinceMaintenance = Number(
+        (
+          drone.totalFlightHours -
+          (drone.flightHoursAtLastMaintenance ?? 0)
+        ).toFixed(1),
+      );
+      const dueByFlightHours = hoursSinceMaintenance >= 50;
+      return inHorizon || dueByFlightHours;
     })
     .sort(
       (left, right) =>

@@ -66,7 +66,11 @@ export class MaintenanceService {
     drone.lastMaintenanceDate = performedAt;
     drone.flightHoursAtLastMaintenance =
       createMaintenanceLogDto.flightHoursAtMaintenance;
-    drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(performedAt);
+    drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
+      performedAt,
+      drone.totalFlightHours,
+      drone.flightHoursAtLastMaintenance,
+    );
     drone.status = resolveDroneStatusAfterMaintenance(drone.status);
 
     await this.dronesRepository.save(drone);

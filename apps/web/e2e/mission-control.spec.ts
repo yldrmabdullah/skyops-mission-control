@@ -60,6 +60,10 @@ test('creates a drone, schedules a mission, transitions it, and reflects the fle
     page.getByText('Mission status updated successfully.'),
   ).toBeVisible();
 
+  await page.goto('/dashboard');
+  await expect(page.getByText('Total drones')).toBeVisible();
+  await expect(page.getByText('Maintenance watchlist')).toBeVisible();
+
   await page.goto('/drones');
   const droneRow = page.locator('tr', {
     has: page.getByRole('link', { name: uniqueSerial }),

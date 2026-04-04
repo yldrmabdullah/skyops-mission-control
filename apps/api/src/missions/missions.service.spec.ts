@@ -199,6 +199,7 @@ describe('MissionsService', () => {
       status: DroneStatus.IN_MISSION,
       totalFlightHours: 49,
       flightHoursAtLastMaintenance: 0,
+      lastMaintenanceDate: new Date('2026-01-01T00:00:00.000Z'),
       nextMaintenanceDueDate: new Date('2026-12-01T00:00:00.000Z'),
     } as Drone;
 

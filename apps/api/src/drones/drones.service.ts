@@ -4,10 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, MoreThan, Not, Repository } from 'typeorm';
+import { FindOptionsWhere, In, Not, Repository } from 'typeorm';
 import { buildPaginationMeta } from '../common/utils/pagination';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
-import { Mission } from '../missions/entities/mission.entity';
+import { Mission, MissionStatus } from '../missions/entities/mission.entity';
 import { CreateDroneDto } from './dto/create-drone.dto';
 import { ListDronesQueryDto } from './dto/list-drones-query.dto';
 import { UpdateDroneDto } from './dto/update-drone.dto';
@@ -62,8 +62,11 @@ export class DronesService {
       totalFlightHours,
       flightHoursAtLastMaintenance,
       lastMaintenanceDate,
-      nextMaintenanceDueDate:
-        calculateNextMaintenanceDueDate(lastMaintenanceDate),
+      nextMaintenanceDueDate: calculateNextMaintenanceDueDate(
+        lastMaintenanceDate,
+        totalFlightHours,
+        flightHoursAtLastMaintenance,
+      ),
     });
 
     return this.dronesRepository.save(drone);
@@ -145,15 +148,19 @@ export class DronesService {
     }
 
     if (updateDroneDto.status === DroneStatus.RETIRED) {
-      const upcomingMission = await this.missionsRepository.findOne({
+      const activeMission = await this.missionsRepository.findOne({
         where: {
           droneId: id,
-          plannedStart: MoreThan(new Date()),
+          status: In([
+            MissionStatus.PLANNED,
+            MissionStatus.PRE_FLIGHT_CHECK,
+            MissionStatus.IN_PROGRESS,
+          ]),
         },
         order: { plannedStart: 'ASC' },
       });
 
-      assertDroneCanBeRetired(upcomingMission);
+      assertDroneCanBeRetired(activeMission);
     }
 
     const lastMaintenanceDate = updateDroneDto.lastMaintenanceDate
@@ -177,8 +184,11 @@ export class DronesService {
       totalFlightHours,
       flightHoursAtLastMaintenance,
       lastMaintenanceDate,
-      nextMaintenanceDueDate:
-        calculateNextMaintenanceDueDate(lastMaintenanceDate),
+      nextMaintenanceDueDate: calculateNextMaintenanceDueDate(
+        lastMaintenanceDate,
+        totalFlightHours,
+        flightHoursAtLastMaintenance,
+      ),
     });
 
     return this.dronesRepository.save(drone);

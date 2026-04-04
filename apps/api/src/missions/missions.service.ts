@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { buildPaginationMeta } from '../common/utils/pagination';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
 import { resolveDroneStatusAfterMissionCompletion } from '../drones/utils/drone-rules';
+import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
 import { TransitionMissionDto } from './dto/transition-mission.dto';
@@ -200,6 +201,11 @@ export class MissionsService {
           drone.totalFlightHours + transitionMissionDto.flightHoursLogged
         ).toFixed(1),
       );
+      drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
+        drone.lastMaintenanceDate,
+        drone.totalFlightHours,
+        drone.flightHoursAtLastMaintenance,
+      );
       drone.status = resolveDroneStatusAfterMissionCompletion(drone);
 
       await this.dronesRepository.save(drone);
@@ -257,8 +263,12 @@ export class MissionsService {
     const overlappingMission = await this.missionsRepository
       .createQueryBuilder('mission')
       .where('mission.droneId = :droneId', { droneId })
-      .andWhere('mission.status != :abortedStatus', {
-        abortedStatus: MissionStatus.ABORTED,
+      .andWhere('mission.status IN (:...schedulableStatuses)', {
+        schedulableStatuses: [
+          MissionStatus.PLANNED,
+          MissionStatus.PRE_FLIGHT_CHECK,
+          MissionStatus.IN_PROGRESS,
+        ],
       })
       .andWhere('mission.plannedStart < :plannedEnd', { plannedEnd })
       .andWhere('mission.plannedEnd > :plannedStart', { plannedStart })
