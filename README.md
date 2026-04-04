@@ -1,13 +1,51 @@
 # SkyOps Mission Control
 
-SkyOps Mission Control is a production-minded full-stack case study for managing a commercial drone fleet, inspection missions, maintenance cycles, and operational risk.
+Internal **operations console** for a commercial drone fleet: **registry**, **inspection missions** (schedule, lifecycle, reassignment), and **maintenance** logging with rules tied to calendar and flight hours. Operators authenticate with **JWT**; every drone, mission, and log is scoped to the signed-in account.
 
-The solution is built as a TypeScript monorepo with a NestJS REST API, a React dashboard, PostgreSQL persistence, JWT authentication (owner-scoped data), automated tests, Docker support, and a free-tier deployment blueprint.
+Built as a **TypeScript monorepo**: NestJS REST API, React (Vite) SPA, PostgreSQL via TypeORM migrations, Swagger, Jest + Playwright, Docker Compose, GitHub Actions, and **Render** Blueprints (`dev` for integration, `master` for production deploys).
 
-**Related docs**
+## Live demo (Render)
 
-- [CANDIDATE_CASE_STUDY.md](CANDIDATE_CASE_STUDY.md) — original requirements brief (what was asked for).
-- [docs/BRANCHING.md](docs/BRANCHING.md) — branch naming and GitHub Flow–style workflow.
+| Resource              | URL                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Web dashboard**     | [skyops-mission-control-web.onrender.com](https://skyops-mission-control-web.onrender.com/)                      |
+| **API health**        | [skyops-mission-control-api.onrender.com/api/health](https://skyops-mission-control-api.onrender.com/api/health) |
+| **Swagger (OpenAPI)** | [skyops-mission-control-api.onrender.com/docs](https://skyops-mission-control-api.onrender.com/docs)             |
+
+On Render’s free web tier the API **sleeps after idle time**; the first request after sleep may take **~30–60 seconds**. Production has **no pre-seeded demo user** unless you run seed against that database—use **Sign up** on the live dashboard to create an account.
+
+## Documentation map
+
+| Document                                           | What it covers                                                                | When to open it                                                            |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **This README**                                    | Full product + stack summary, local/Docker run, tests, CI, deploy overview    | Onboarding, running the project, understanding what shipped                |
+| [docs/BRANCHING.md](docs/BRANCHING.md)             | `dev` vs `master`, `feature/*` / `fix/*` / `chore/*`, release & Render wiring | Creating branches, PRs, merging to prod                                    |
+| [docs/RENDER.md](docs/RENDER.md)                   | Env vars (`DATABASE_URL`, `VITE_API_BASE_URL`), Blueprint quirks, checklists  | Deploying or debugging Render (URLs, rebuild static site after API rename) |
+| [CANDIDATE_CASE_STUDY.md](CANDIDATE_CASE_STUDY.md) | Original case-study brief (requirements only)                                 | Comparing spec to implementation                                           |
+| [apps/api/README.md](apps/api/README.md)           | API-only pnpm commands                                                        | Working inside `apps/api`                                                  |
+| [apps/web/README.md](apps/web/README.md)           | Web-only pnpm commands                                                        | Working inside `apps/web`                                                  |
+
+## Contents
+
+- [Live demo (Render)](#live-demo-render)
+- [Documentation map](#documentation-map)
+- [What the application contains](#what-the-application-contains)
+- [Tech stack](#tech-stack)
+- [Highlights](#highlights)
+- [Repository structure](#repository-structure)
+- [Product scope](#product-scope)
+- [Architecture notes](#architecture-notes)
+- [Authentication](#authentication)
+- [Git workflow](#git-workflow)
+- [Local setup](#local-setup)
+- [Docker](#docker-full-stack)
+- [Environment variables](#environment-variables-summary)
+- [Testing](#testing)
+- [API surface](#api-surface)
+- [CI](#ci)
+- [Deployment (Render)](#free-deployment-render)
+- [Demo walkthrough](#demo-walkthrough-suggestion)
+- [Trade-offs and next steps](#trade-offs-and-next-steps)
 
 ## What the application contains
 
@@ -325,6 +363,8 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ## Free deployment (Render)
 
+**Current production URLs** are listed under [Live demo (Render)](#live-demo-render). To change hostnames, update the static site’s **`VITE_API_BASE_URL`** and redeploy the frontend (build-time env).
+
 ### Production (`master`)
 
 Blueprint: [`render.yaml`](render.yaml). Both web services set **`branch: master`** so Render deploys only when **`master`** updates.
@@ -350,6 +390,8 @@ Health check: `GET /api/health`
 ### Staging (`dev`)
 
 Blueprint: [`render.dev.yaml`](render.dev.yaml). Uses **`branch: dev`** and separate service names plus a **dev database** so staging does not touch production data. Create a **second** Blueprint in Render pointing at `render.dev.yaml`, then verify **`VITE_API_BASE_URL`** matches the dev API URL shown in the dashboard after the first deploy.
+
+Full tables and troubleshooting: [docs/RENDER.md](docs/RENDER.md).
 
 ## Demo walkthrough suggestion
 
