@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   Drone,
   DroneModel,
@@ -41,9 +41,29 @@ describe('MissionsService', () => {
   beforeEach(() => {
     missionsRepository = createMissionRepositoryMock();
     dronesRepository = createDroneRepositoryMock();
+    const auditService = { record: jest.fn().mockResolvedValue(undefined) };
+    const notificationsService = {
+      notifyScheduleConflictIfEnabled: jest.fn().mockResolvedValue(undefined),
+      notifyMaintenanceDueStub: jest.fn().mockResolvedValue(undefined),
+    };
+    const dataSource = {
+      transaction: jest.fn(
+        async (fn: (m: { save: jest.Mock }) => Promise<Mission>) => {
+          const manager = {
+            save: jest.fn((_target: unknown, entity?: unknown) =>
+              Promise.resolve((entity ?? _target) as Mission),
+            ),
+          };
+          return fn(manager);
+        },
+      ),
+    };
     service = new MissionsService(
+      dataSource as unknown as DataSource,
       missionsRepository as unknown as Repository<Mission>,
       dronesRepository as unknown as Repository<Drone>,
+      auditService as never,
+      notificationsService as never,
     );
   });
 
@@ -65,6 +85,7 @@ describe('MissionsService', () => {
           plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
         },
+        OWNER_ID,
         OWNER_ID,
       ),
     ).rejects.toThrow(BadRequestException);
@@ -92,6 +113,30 @@ describe('MissionsService', () => {
           plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
         },
         OWNER_ID,
+        OWNER_ID,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects moving to in progress when the drone is not available', async () => {
+    missionsRepository.findOne.mockResolvedValue({
+      id: 'mission-1',
+      droneId: 'drone-1',
+      status: MissionStatus.PRE_FLIGHT_CHECK,
+      drone: { ownerId: OWNER_ID },
+    } as Mission);
+    dronesRepository.findOne.mockResolvedValue({
+      id: 'drone-1',
+      ownerId: OWNER_ID,
+      status: DroneStatus.MAINTENANCE,
+    } as Drone);
+
+    await expect(
+      service.transition(
+        'mission-1',
+        { status: MissionStatus.IN_PROGRESS },
+        OWNER_ID,
+        OWNER_ID,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -113,6 +158,7 @@ describe('MissionsService', () => {
       service.transition(
         'mission-1',
         { status: MissionStatus.PLANNED },
+        OWNER_ID,
         OWNER_ID,
       ),
     ).rejects.toThrow(BadRequestException);
@@ -141,6 +187,7 @@ describe('MissionsService', () => {
           abortReason: '   ',
         },
         OWNER_ID,
+        OWNER_ID,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -167,6 +214,7 @@ describe('MissionsService', () => {
           status: MissionStatus.ABORTED,
         },
         OWNER_ID,
+        OWNER_ID,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -180,6 +228,7 @@ describe('MissionsService', () => {
         {
           status: MissionStatus.PRE_FLIGHT_CHECK,
         },
+        OWNER_ID,
         OWNER_ID,
       ),
     ).rejects.toThrow(NotFoundException);
@@ -262,10 +311,86 @@ describe('MissionsService', () => {
         flightHoursLogged: 2,
       },
       OWNER_ID,
+      OWNER_ID,
     );
 
     expect(updatedMission.status).toBe(MissionStatus.COMPLETED);
     expect(drone.totalFlightHours).toBe(51);
     expect(drone.status).toBe(DroneStatus.MAINTENANCE);
+  });
+
+  it('allows updating non-date fields even if the planned date is in the past', async () => {
+    const pastDate = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
+    const mission = {
+      id: 'mission-1',
+      droneId: 'drone-1',
+      status: MissionStatus.PLANNED,
+      plannedStart: pastDate,
+      plannedEnd: new Date(pastDate.getTime() + 1000 * 60 * 60),
+      drone: { ownerId: OWNER_ID },
+    } as Mission;
+
+    missionsRepository.findOne.mockResolvedValue(mission);
+    missionsRepository.__queryBuilder.getOne.mockResolvedValue(null);
+
+    const updated = await service.update(
+      'mission-1',
+      { name: 'Updated name' },
+      OWNER_ID,
+    );
+
+    expect(updated.name).toBe('Updated name');
+    expect(missionsRepository.save).toHaveBeenCalled();
+  });
+
+  it('rejects updating planned date to a past date', async () => {
+    const futureDate = new Date(Date.now() + 1000 * 60 * 60);
+    const pastDate = new Date(Date.now() - 1000 * 60 * 60);
+    const mission = {
+      id: 'mission-1',
+      droneId: 'drone-1',
+      status: MissionStatus.PLANNED,
+      plannedStart: futureDate,
+      plannedEnd: new Date(futureDate.getTime() + 1000 * 60 * 60),
+      drone: { ownerId: OWNER_ID },
+    } as Mission;
+
+    missionsRepository.findOne.mockResolvedValue(mission);
+
+    await expect(
+      service.update(
+        'mission-1',
+        { plannedStart: pastDate.toISOString() },
+        OWNER_ID,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects completing a mission if actualEnd is before actualStart', async () => {
+    const start = new Date();
+    const end = new Date(start.getTime() - 1000); // 1s before start
+    const mission = {
+      id: 'mission-1',
+      droneId: 'drone-1',
+      status: MissionStatus.IN_PROGRESS,
+      actualStart: start,
+      drone: { ownerId: OWNER_ID },
+    } as Mission;
+
+    missionsRepository.findOne.mockResolvedValue(mission);
+    dronesRepository.findOne.mockResolvedValue({ id: 'drone-1' } as Drone);
+
+    await expect(
+      service.transition(
+        'mission-1',
+        {
+          status: MissionStatus.COMPLETED,
+          actualEnd: end.toISOString(),
+          flightHoursLogged: 1,
+        },
+        OWNER_ID,
+        OWNER_ID,
+      ),
+    ).rejects.toThrow(BadRequestException);
   });
 });

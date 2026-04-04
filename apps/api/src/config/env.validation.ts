@@ -44,6 +44,11 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   JWT_EXPIRES_IN?: string;
+
+  /** Comma-separated browser origins for CORS (e.g. https://app.example.com,http://localhost:5173). */
+  @IsOptional()
+  @IsString()
+  CORS_ORIGIN?: string;
 }
 
 export function validateEnvironment(config: Record<string, unknown>) {
@@ -57,6 +62,17 @@ export function validateEnvironment(config: Record<string, unknown>) {
 
   if (errors.length > 0) {
     throw new Error(errors.toString());
+  }
+
+  const nodeEnv = process.env.NODE_ENV;
+
+  if (nodeEnv === 'production') {
+    const secret = validatedConfig.JWT_SECRET?.trim();
+    if (!secret || secret.length < 32) {
+      throw new Error(
+        'JWT_SECRET is required in production and must be at least 32 characters.',
+      );
+    }
   }
 
   if (!validatedConfig.DATABASE_URL) {

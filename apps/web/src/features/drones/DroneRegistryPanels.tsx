@@ -1,8 +1,6 @@
-import { Link } from 'react-router-dom';
 import { EmptyState, SurfaceCard } from '../../components/SurfaceCard';
-import { StatusPill } from '../../components/StatusPill';
 import type { Drone } from '../../types/api';
-import { formatEnumLabel } from './drone-detail.utils';
+import { DroneRegistryTableRow } from './DroneRegistryTableRow';
 
 interface DroneRegistryHighlightsProps {
   total: number;
@@ -39,8 +37,8 @@ export function DroneRegistryHighlights({
           <div>
             <div className="list-row-title">Drill-down ready</div>
             <div className="muted">
-              Use View details or the highlighted serial to open the full
-              screen with updates and maintenance across {total} tracked assets.
+              Use View details or the highlighted serial to open the full screen
+              with updates and maintenance across {total} tracked assets.
             </div>
           </div>
         </div>
@@ -119,34 +117,7 @@ export function DronesTable({ drones, isLoading, total }: DronesTableProps) {
           </thead>
           <tbody>
             {drones.map((drone) => (
-              <tr key={drone.id}>
-                <td>
-                  <Link
-                    className="table-serial-link"
-                    data-registry-drone-id={drone.id}
-                    title="Open drone detail"
-                    to={`/drones/${drone.id}`}
-                  >
-                    {drone.serialNumber}
-                  </Link>
-                </td>
-                <td>{formatEnumLabel(drone.model)}</td>
-                <td>
-                  <StatusPill value={drone.status} />
-                </td>
-                <td>{drone.totalFlightHours.toFixed(1)}h</td>
-                <td>
-                  {new Date(drone.nextMaintenanceDueDate).toLocaleDateString()}
-                </td>
-                <td className="table-actions">
-                  <Link
-                    className="button secondary table-details-link"
-                    to={`/drones/${drone.id}`}
-                  >
-                    View details
-                  </Link>
-                </td>
-              </tr>
+              <DroneRegistryTableRow drone={drone} key={drone.id} />
             ))}
           </tbody>
         </table>

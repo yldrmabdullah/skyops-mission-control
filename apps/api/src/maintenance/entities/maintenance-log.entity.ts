@@ -9,6 +9,15 @@ import {
 import { Drone } from '../../drones/entities/drone.entity';
 import { numericTransformer } from '../../database/numeric.transformer';
 
+export type MaintenanceAttachment =
+  | { type: 'url'; url: string }
+  | {
+      type: 'file';
+      storedFileName: string;
+      originalName: string;
+      mimeType: string;
+    };
+
 export enum MaintenanceType {
   ROUTINE_CHECK = 'ROUTINE_CHECK',
   BATTERY_REPLACEMENT = 'BATTERY_REPLACEMENT',
@@ -53,4 +62,7 @@ export class MaintenanceLog {
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt!: Date;
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  attachments!: MaintenanceAttachment[];
 }

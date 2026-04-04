@@ -1,18 +1,25 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/use-auth';
+import { AuthBrandStory } from '../components/AuthBrandStory';
 import { AuthShell } from '../components/AuthShell';
 import { FormNotice } from '../components/FormNotice';
+import { RoleAccessGuide } from '../components/RoleAccessGuide';
+import { getErrorMessage } from '../lib/api';
 
 export function SignInPage() {
-  const { signIn, status } = useAuth();
+  const { signIn, status, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const rawFrom =
     (location.state as { from?: { pathname?: string } })?.from?.pathname ??
     '/dashboard';
   const from =
-    rawFrom && rawFrom !== '/sign-in' && rawFrom !== '/sign-up'
+    rawFrom &&
+    rawFrom !== '/sign-in' &&
+    rawFrom !== '/sign-up' &&
+    rawFrom !== '/workspace/bootstrap' &&
+    rawFrom !== '/account/change-password'
       ? rawFrom
       : '/dashboard';
   const sessionExpired = Boolean(
@@ -25,11 +32,21 @@ export function SignInPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+
+
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status !== 'authenticated' || !user) {
+      return;
+    }
+    if (user.mustChangePassword) {
+      navigate('/account/change-password', {
+        replace: true,
+        state: { from: { pathname: from } },
+      });
+    } else {
       navigate(from, { replace: true });
     }
-  }, [status, from, navigate]);
+  }, [status, user, from, navigate]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -37,11 +54,20 @@ export function SignInPage() {
     setSubmitting(true);
 
     try {
-      await signIn(email.trim(), password);
-      navigate(from, { replace: true });
-    } catch {
+      const signedIn = await signIn(email.trim(), password);
+      if (signedIn.mustChangePassword) {
+        navigate('/account/change-password', {
+          replace: true,
+          state: { from: { pathname: from } },
+        });
+      } else {
+        navigate(from, { replace: true });
+      }
+    } catch (error) {
+      const detail = getErrorMessage(error);
       setFormError(
-        'Invalid email or password. Check your credentials and try again.',
+        detail ||
+          'Invalid email or password. Check your credentials and try again.',
       );
     } finally {
       setSubmitting(false);
@@ -61,15 +87,21 @@ export function SignInPage() {
 
   return (
     <AuthShell
+      brandContent={
+        <div className="auth-shell-brand-stack">
+          <AuthBrandStory />
+          <RoleAccessGuide lead="Managers run the workspace and invite Pilots and Technicians from Settings. Pilots and Technicians sign in with the email and one-time password their Manager shared." />
+        </div>
+      }
       footer={
         <p className="muted auth-switch">
-          New to the console?{' '}
+          Don't have an account?{' '}
           <Link className="auth-inline-link" to="/sign-up">
-            Create an operator account
+            Sign up
           </Link>
         </p>
       }
-      subtitle="Sign in with the email and password issued to your operations team."
+      subtitle="Securely manage your drone fleet operations and compliance trail."
       title="Welcome back"
     >
       {sessionExpired ? (
@@ -123,8 +155,8 @@ export function SignInPage() {
         </label>
 
         <p className="field-hint">
-          Forgot access? Contact your SkyOps administrator — self-service
-          recovery is not enabled for this environment.
+          Forgot your password? Ask your workspace Manager — automated password
+          reset is not enabled in this environment.
         </p>
 
         <div className="form-actions auth-form-actions">

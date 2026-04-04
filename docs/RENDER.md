@@ -66,7 +66,7 @@ Second Blueprint, branch **`dev`**, file **`render.dev.yaml`**. Uses separate DB
 
 1. API **Logs**: no crash loop; migrations applied.
 2. Open `https://<api>/api/health` — expect JSON OK.
-3. Static site: sign-in / register hits the correct API (browser **Network** tab).
+3. Static site: sign-in and **`/sign-up`** (when the API reports an empty user table) hit the correct API (browser **Network** tab); confirm `GET …/auth/status` and `POST …/auth/login` or `register` as expected.
 4. If auth fails with network error, recheck **`VITE_API_BASE_URL`** and redeploy the static site.
 
 ## Related files

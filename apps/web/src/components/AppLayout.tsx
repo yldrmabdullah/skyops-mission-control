@@ -1,14 +1,27 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/use-auth';
+import { roleTitle } from '../lib/role-descriptions';
+import { showMissionControlNav } from '../lib/roles';
+import type { OperatorRole } from '../types/api';
 
-const navigationItems = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/drones', label: 'Drone Registry' },
-  { to: '/missions', label: 'Mission Control' },
-];
+function navigationForRole(role: OperatorRole | undefined) {
+  const items = [
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/drones', label: 'Drone Registry' },
+  ];
+  if (showMissionControlNav(role)) {
+    items.push({ to: '/missions', label: 'Mission Control' });
+  }
+  items.push(
+    { to: '/audit', label: 'Audit log' },
+    { to: '/settings', label: 'Settings' },
+  );
+  return items;
+}
 
 export function AppLayout() {
   const { user, signOut } = useAuth();
+  const navigationItems = navigationForRole(user?.role);
 
   return (
     <div className="app-shell">
@@ -42,6 +55,11 @@ export function AppLayout() {
             <span className="muted sidebar-account-label">Signed in</span>
             <strong className="sidebar-account-name">{user?.fullName}</strong>
             <span className="muted sidebar-account-email">{user?.email}</span>
+            {user?.role ? (
+              <span className="muted sidebar-account-role">
+                Role: {roleTitle(user.role)}
+              </span>
+            ) : null}
           </div>
           <button
             className="button secondary sidebar-signout"

@@ -2,6 +2,8 @@
 
 React + Vite dashboard for SkyOps Mission Control (fleet registry, missions, maintenance, dashboard).
 
+**Access model:** Sign in at **`/sign-in`**. The first account in a fresh database is created at **`/sign-up`** (same screen at **`/workspace/bootstrap`**). The workspace **Manager** invites Pilots and Technicians from **`/settings`**; invitees sign in with a one-time password and are prompted to set a new password at **`/account/change-password`**.
+
 **Docs:** Start from the monorepo [README.md](../../README.md). Production UI (when deployed): [https://skyops-mission-control-web.onrender.com](https://skyops-mission-control-web.onrender.com/).
 
 ## Run from the monorepo root

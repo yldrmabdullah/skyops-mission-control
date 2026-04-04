@@ -2,18 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { DataType, newDb } from 'pg-mem';
 import { User } from '../auth/entities/user.entity';
 import { AuthModule } from '../auth/auth.module';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 import { Drone } from '../drones/entities/drone.entity';
 import { DronesModule } from '../drones/drones.module';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
 import { MaintenanceModule } from '../maintenance/maintenance.module';
 import { Mission } from '../missions/entities/mission.entity';
 import { MissionsModule } from '../missions/missions.module';
+import { InAppNotification } from '../notifications/entities/in-app-notification.entity';
 import { ReportsModule } from '../reports/reports.module';
 
 @Module({
@@ -28,11 +32,24 @@ import { ReportsModule } from '../reports/reports.module';
         }),
       ],
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 10_000,
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       useFactory: () =>
         ({
           type: 'postgres',
-          entities: [User, Drone, Mission, MaintenanceLog],
+          entities: [
+            User,
+            Drone,
+            Mission,
+            MaintenanceLog,
+            AuditEvent,
+            InAppNotification,
+          ],
           synchronize: true,
           logging: false,
         }) satisfies DataSourceOptions,
@@ -71,6 +88,13 @@ import { ReportsModule } from '../reports/reports.module';
     MaintenanceModule,
     ReportsModule,
   ],
-  providers: [JwtAuthGuard, { provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [
+    JwtAuthGuard,
+    RolesGuard,
+    ThrottlerGuard,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class E2eModule {}

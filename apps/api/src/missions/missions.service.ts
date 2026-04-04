@@ -3,13 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   assertOrderedDateRangeOrThrow,
   parseIsoDateOrThrow,
 } from '../common/utils/date.utils';
+import { AuditService } from '../audit/audit.service';
 import { buildPaginationMeta } from '../common/utils/pagination';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
 import { resolveDroneStatusAfterMissionCompletion } from '../drones/utils/drone-rules';
 import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
@@ -23,13 +25,21 @@ import { assertValidMissionTransition } from './utils/mission-transition.utils';
 @Injectable()
 export class MissionsService {
   constructor(
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     @InjectRepository(Mission)
     private readonly missionsRepository: Repository<Mission>,
     @InjectRepository(Drone)
     private readonly dronesRepository: Repository<Drone>,
+    private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
-  async create(createMissionDto: CreateMissionDto, ownerId: string) {
+  async create(
+    createMissionDto: CreateMissionDto,
+    fleetOwnerId: string,
+    actorUserId: string,
+  ) {
     const plannedStart = parseIsoDateOrThrow(
       createMissionDto.plannedStart,
       'Planned start',
@@ -39,13 +49,19 @@ export class MissionsService {
       'Planned end',
     );
 
-    await this.getAvailableDroneOrThrow(createMissionDto.droneId, ownerId);
+    await this.getAvailableDroneOrThrow(
+      createMissionDto.droneId,
+      fleetOwnerId,
+    );
     this.assertValidPlannedWindow(plannedStart, plannedEnd);
 
     await this.assertNoOverlap(
       createMissionDto.droneId,
       plannedStart,
       plannedEnd,
+      {
+        ownerIdForNotify: fleetOwnerId,
+      },
     );
 
     const mission = this.missionsRepository.create({
@@ -55,10 +71,17 @@ export class MissionsService {
       status: MissionStatus.PLANNED,
     });
 
-    return this.missionsRepository.save(mission);
+    const saved = await this.missionsRepository.save(mission);
+    void this.auditService
+      .record(actorUserId, 'MISSION_CREATED', 'Mission', saved.id, {
+        name: saved.name,
+        droneId: saved.droneId,
+      })
+      .catch(() => undefined);
+    return saved;
   }
 
-  async findAll(query: ListMissionsQueryDto, ownerId: string) {
+  async findAll(query: ListMissionsQueryDto, fleetOwnerId: string) {
     if (query.startDate && query.endDate) {
       assertOrderedDateRangeOrThrow(
         parseIsoDateOrThrow(query.startDate, 'startDate'),
@@ -71,7 +94,7 @@ export class MissionsService {
     const queryBuilder = this.missionsRepository
       .createQueryBuilder('mission')
       .leftJoinAndSelect('mission.drone', 'drone')
-      .andWhere('drone.ownerId = :ownerId', { ownerId })
+      .andWhere('drone.ownerId = :fleetOwnerId', { fleetOwnerId })
       .orderBy('mission.plannedStart', 'ASC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -86,6 +109,14 @@ export class MissionsService {
       queryBuilder.andWhere('mission.droneId = :droneId', {
         droneId: query.droneId,
       });
+    }
+
+    const term = query.search?.trim();
+    if (term) {
+      queryBuilder.andWhere(
+        '(mission.name ILIKE :search OR mission.pilotName ILIKE :search)',
+        { search: `%${term}%` },
+      );
     }
 
     if (query.startDate) {
@@ -108,17 +139,13 @@ export class MissionsService {
     };
   }
 
-  async findOne(id: string, ownerId: string) {
+  async findOne(id: string, fleetOwnerId: string) {
     const mission = await this.missionsRepository.findOne({
-      where: { id },
+      where: { id, drone: { ownerId: fleetOwnerId } },
       relations: { drone: true },
     });
 
     if (!mission) {
-      throw new NotFoundException(`Mission ${id} was not found.`);
-    }
-
-    if (mission.drone.ownerId !== ownerId) {
       throw new NotFoundException(`Mission ${id} was not found.`);
     }
 
@@ -128,9 +155,9 @@ export class MissionsService {
   async update(
     id: string,
     updateMissionDto: UpdateMissionDto,
-    ownerId: string,
+    fleetOwnerId: string,
   ) {
-    const mission = await this.findOne(id, ownerId);
+    const mission = await this.findOne(id, fleetOwnerId);
 
     if (mission.status !== MissionStatus.PLANNED) {
       throw new BadRequestException(
@@ -144,16 +171,26 @@ export class MissionsService {
     const plannedEnd = updateMissionDto.plannedEnd
       ? parseIsoDateOrThrow(updateMissionDto.plannedEnd, 'Planned end')
       : mission.plannedEnd;
+
+    const isDateChanging =
+      plannedStart.getTime() !== mission.plannedStart.getTime() ||
+      plannedEnd.getTime() !== mission.plannedEnd.getTime();
+
     const droneId = updateMissionDto.droneId ?? mission.droneId;
     const isReassigningDrone = droneId !== mission.droneId;
 
     if (isReassigningDrone) {
-      await this.getAvailableDroneOrThrow(droneId, ownerId);
+      await this.getAvailableDroneOrThrow(droneId, fleetOwnerId);
     }
 
-    this.assertValidPlannedWindow(plannedStart, plannedEnd);
+    if (isDateChanging) {
+      this.assertValidPlannedWindow(plannedStart, plannedEnd);
+    }
 
-    await this.assertNoOverlap(droneId, plannedStart, plannedEnd, mission.id);
+    await this.assertNoOverlap(droneId, plannedStart, plannedEnd, {
+      excludeMissionId: mission.id,
+      ownerIdForNotify: fleetOwnerId,
+    });
 
     Object.assign(mission, {
       ...updateMissionDto,
@@ -168,10 +205,11 @@ export class MissionsService {
   async transition(
     id: string,
     transitionMissionDto: TransitionMissionDto,
-    ownerId: string,
+    fleetOwnerId: string,
+    actorUserId: string,
   ) {
-    const mission = await this.findOne(id, ownerId);
-    const drone = await this.getDroneOrThrow(mission.droneId, ownerId);
+    const mission = await this.findOne(id, fleetOwnerId);
+    const drone = await this.getDroneOrThrow(mission.droneId, fleetOwnerId);
 
     if (mission.status === transitionMissionDto.status) {
       throw new BadRequestException(`Mission is already ${mission.status}.`);
@@ -179,65 +217,180 @@ export class MissionsService {
 
     assertValidMissionTransition(mission.status, transitionMissionDto.status);
 
-    if (transitionMissionDto.status === MissionStatus.ABORTED) {
-      const abortReason = transitionMissionDto.abortReason?.trim();
-      if (!abortReason) {
-        throw new BadRequestException('Aborting a mission requires a reason.');
-      }
+    const prevStatus = mission.status;
 
-      mission.abortReason = abortReason;
-      mission.actualEnd = transitionMissionDto.actualEnd
-        ? parseIsoDateOrThrow(transitionMissionDto.actualEnd, 'Actual end')
-        : new Date();
-      mission.status = MissionStatus.ABORTED;
-      drone.status = DroneStatus.AVAILABLE;
-
-      await this.dronesRepository.save(drone);
-      return this.missionsRepository.save(mission);
-    }
-
-    if (transitionMissionDto.status === MissionStatus.IN_PROGRESS) {
-      mission.actualStart = transitionMissionDto.actualStart
-        ? parseIsoDateOrThrow(transitionMissionDto.actualStart, 'Actual start')
-        : new Date();
-      mission.status = MissionStatus.IN_PROGRESS;
-      drone.status = DroneStatus.IN_MISSION;
-
-      await this.dronesRepository.save(drone);
-      return this.missionsRepository.save(mission);
-    }
-
-    if (transitionMissionDto.status === MissionStatus.COMPLETED) {
-      if (!transitionMissionDto.flightHoursLogged) {
-        throw new BadRequestException(
-          'Completing a mission requires flight hours to be logged.',
+    switch (transitionMissionDto.status) {
+      case MissionStatus.ABORTED:
+        return this.persistAbortedMission(
+          mission,
+          drone,
+          transitionMissionDto,
+          actorUserId,
+          prevStatus,
         );
-      }
+      case MissionStatus.IN_PROGRESS:
+        return this.persistInProgressMission(
+          mission,
+          drone,
+          transitionMissionDto,
+          actorUserId,
+        );
+      case MissionStatus.COMPLETED:
+        return this.persistCompletedMission(
+          mission,
+          drone,
+          transitionMissionDto,
+          fleetOwnerId,
+          actorUserId,
+        );
+      default:
+        return this.persistGenericMissionTransition(
+          mission,
+          transitionMissionDto.status,
+          actorUserId,
+          prevStatus,
+        );
+    }
+  }
 
-      mission.flightHoursLogged = transitionMissionDto.flightHoursLogged;
-      mission.actualEnd = transitionMissionDto.actualEnd
-        ? parseIsoDateOrThrow(transitionMissionDto.actualEnd, 'Actual end')
-        : new Date();
-      mission.status = MissionStatus.COMPLETED;
-
-      drone.totalFlightHours = Number(
-        (
-          drone.totalFlightHours + transitionMissionDto.flightHoursLogged
-        ).toFixed(1),
-      );
-      drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
-        drone.lastMaintenanceDate,
-        drone.totalFlightHours,
-        drone.flightHoursAtLastMaintenance,
-      );
-      drone.status = resolveDroneStatusAfterMissionCompletion(drone);
-
-      await this.dronesRepository.save(drone);
-      return this.missionsRepository.save(mission);
+  private async persistAbortedMission(
+    mission: Mission,
+    drone: Drone,
+    dto: TransitionMissionDto,
+    actorUserId: string,
+    prevStatus: MissionStatus,
+  ): Promise<Mission> {
+    const abortReason = dto.abortReason?.trim();
+    if (!abortReason) {
+      throw new BadRequestException('Aborting a mission requires a reason.');
     }
 
-    mission.status = transitionMissionDto.status;
-    return this.missionsRepository.save(mission);
+    mission.abortReason = abortReason;
+    mission.actualEnd = dto.actualEnd
+      ? parseIsoDateOrThrow(dto.actualEnd, 'Actual end')
+      : new Date();
+
+    if (mission.actualStart) {
+      assertOrderedDateRangeOrThrow(
+        mission.actualStart,
+        mission.actualEnd,
+        'Actual start',
+        'Actual end',
+      );
+    }
+
+    mission.status = MissionStatus.ABORTED;
+    drone.status = DroneStatus.AVAILABLE;
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await manager.save(drone);
+      return manager.save(mission);
+    });
+    void this.auditService
+      .record(actorUserId, 'MISSION_ABORTED', 'Mission', saved.id, {
+        from: prevStatus,
+      })
+      .catch(() => undefined);
+    return saved;
+  }
+
+  private async persistInProgressMission(
+    mission: Mission,
+    drone: Drone,
+    dto: TransitionMissionDto,
+    actorUserId: string,
+  ): Promise<Mission> {
+    if (drone.status !== DroneStatus.AVAILABLE) {
+      throw new BadRequestException(
+        'The drone must be AVAILABLE before this mission can move to in progress.',
+      );
+    }
+
+    mission.actualStart = dto.actualStart
+      ? parseIsoDateOrThrow(dto.actualStart, 'Actual start')
+      : new Date();
+    mission.status = MissionStatus.IN_PROGRESS;
+    drone.status = DroneStatus.IN_MISSION;
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await manager.save(drone);
+      return manager.save(mission);
+    });
+    void this.auditService
+      .record(actorUserId, 'MISSION_IN_PROGRESS', 'Mission', saved.id, {})
+      .catch(() => undefined);
+    return saved;
+  }
+
+  private async persistCompletedMission(
+    mission: Mission,
+    drone: Drone,
+    dto: TransitionMissionDto,
+    fleetOwnerId: string,
+    actorUserId: string,
+  ): Promise<Mission> {
+    if (!dto.flightHoursLogged) {
+      throw new BadRequestException(
+        'Completing a mission requires flight hours to be logged.',
+      );
+    }
+
+    mission.flightHoursLogged = dto.flightHoursLogged;
+    mission.actualEnd = dto.actualEnd
+      ? parseIsoDateOrThrow(dto.actualEnd, 'Actual end')
+      : new Date();
+
+    if (mission.actualStart) {
+      assertOrderedDateRangeOrThrow(
+        mission.actualStart,
+        mission.actualEnd,
+        'Actual start',
+        'Actual end',
+      );
+    }
+
+    mission.status = MissionStatus.COMPLETED;
+
+    drone.totalFlightHours = Number(
+      (drone.totalFlightHours + dto.flightHoursLogged).toFixed(1),
+    );
+    drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
+      drone.lastMaintenanceDate,
+      drone.totalFlightHours,
+      drone.flightHoursAtLastMaintenance,
+    );
+    drone.status = resolveDroneStatusAfterMissionCompletion(drone);
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await manager.save(drone);
+      return manager.save(mission);
+    });
+    void this.auditService
+      .record(actorUserId, 'MISSION_COMPLETED', 'Mission', saved.id, {
+        flightHoursLogged: dto.flightHoursLogged,
+      })
+      .catch(() => undefined);
+    void this.notificationsService
+      .notifyMaintenanceDueStub(fleetOwnerId, drone.serialNumber)
+      .catch(() => undefined);
+    return saved;
+  }
+
+  private async persistGenericMissionTransition(
+    mission: Mission,
+    nextStatus: MissionStatus,
+    actorUserId: string,
+    prevStatus: MissionStatus,
+  ): Promise<Mission> {
+    mission.status = nextStatus;
+    const saved = await this.missionsRepository.save(mission);
+    void this.auditService
+      .record(actorUserId, 'MISSION_TRANSITION', 'Mission', saved.id, {
+        from: prevStatus,
+        to: nextStatus,
+      })
+      .catch(() => undefined);
+    return saved;
   }
 
   private assertValidPlannedWindow(plannedStart: Date, plannedEnd: Date) {
@@ -282,7 +435,7 @@ export class MissionsService {
     droneId: string,
     plannedStart: Date,
     plannedEnd: Date,
-    excludeMissionId?: string,
+    options?: { excludeMissionId?: string; ownerIdForNotify?: string },
   ) {
     const overlappingMission = await this.missionsRepository
       .createQueryBuilder('mission')
@@ -296,12 +449,23 @@ export class MissionsService {
       })
       .andWhere('mission.plannedStart < :plannedEnd', { plannedEnd })
       .andWhere('mission.plannedEnd > :plannedStart', { plannedStart })
-      .andWhere(excludeMissionId ? 'mission.id != :excludeMissionId' : '1=1', {
-        excludeMissionId,
-      })
+      .andWhere(
+        options?.excludeMissionId ? 'mission.id != :excludeMissionId' : '1=1',
+        {
+          excludeMissionId: options?.excludeMissionId,
+        },
+      )
       .getOne();
 
     if (overlappingMission) {
+      if (options?.ownerIdForNotify) {
+        void this.notificationsService
+          .notifyScheduleConflictIfEnabled(
+            options.ownerIdForNotify,
+            'This drone already has an overlapping active mission in the selected window.',
+          )
+          .catch(() => undefined);
+      }
       throw new BadRequestException(
         'The selected drone already has an overlapping mission.',
       );

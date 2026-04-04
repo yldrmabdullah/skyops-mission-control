@@ -1,3 +1,4 @@
+import { useAuth } from '../auth/use-auth';
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -10,10 +11,13 @@ import {
   DroneRegistryToolbar,
   DronesTable,
 } from '../features/drones/DroneRegistryPanels';
+import { useFeedbackState } from '../hooks/use-feedback-state';
 import { createDrone, fetchDrones, getErrorMessage } from '../lib/api';
+import { canManageFleet } from '../lib/roles';
 import type { CreateDronePayload } from '../types/api';
 
 export function DronesPage() {
+  const { user } = useAuth();
   const { notify } = useNotifications();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchValue, setSearchValue] = useState('');
@@ -21,18 +25,19 @@ export function DronesPage() {
   const dronesTableAnchorRef = useRef<HTMLDivElement>(null);
   const scrollTargetDroneIdRef = useRef<string | null>(null);
   const lastHandledCreateSuccessCountRef = useRef(0);
-  const [formFeedback, setFormFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
+  const formFeedback = useFeedbackState();
 
   const selectedStatus = searchParams.get('status') ?? '';
-  const deferredSearchValue = useDeferredValue(searchValue);
   const queryClient = useQueryClient();
 
+  const deferredSearch = useDeferredValue(searchValue);
   const dronesQuery = useQuery({
-    queryKey: ['drones', selectedStatus],
-    queryFn: () => fetchDrones(selectedStatus || undefined),
+    queryKey: ['drones', selectedStatus, deferredSearch.trim()],
+    queryFn: () =>
+      fetchDrones(
+        selectedStatus || undefined,
+        deferredSearch.trim() || undefined,
+      ),
   });
   const data = dronesQuery.data;
   const isLoading = dronesQuery.isLoading;
@@ -41,7 +46,7 @@ export function DronesPage() {
     mutationFn: (payload: CreateDronePayload) => createDrone(payload),
     onSuccess: async (createdDrone) => {
       scrollTargetDroneIdRef.current = createdDrone.id;
-      setFormFeedback({
+      formFeedback.setFeedback({
         tone: 'success',
         message: 'Drone registered successfully.',
       });
@@ -99,7 +104,7 @@ export function DronesPage() {
       ]);
     },
     onError: (error) => {
-      setFormFeedback({
+      formFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
@@ -149,19 +154,8 @@ export function DronesPage() {
     );
   }
 
-  const filteredDrones =
-    data?.data.filter((drone) => {
-      const normalizedSearch = deferredSearchValue.trim().toLowerCase();
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      return (
-        drone.serialNumber.toLowerCase().includes(normalizedSearch) ||
-        drone.model.toLowerCase().includes(normalizedSearch)
-      );
-    }) ?? [];
+  const tableDrones = data?.data ?? [];
+  const showFleetForm = canManageFleet(user?.role);
 
   return (
     <>
@@ -179,24 +173,36 @@ export function DronesPage() {
       </header>
 
       <section className="panel-grid split">
-        <SurfaceCard
-          actions={
-            <span className="muted">
-              Full validation is enforced by the API
-            </span>
-          }
-          title="Add drone"
-        >
-          <DroneRegistryForm
-            key={createSuccessCount}
-            feedback={formFeedback}
-            isPending={createDroneMutation.isPending}
-            onSubmit={(payload) => {
-              setFormFeedback(null);
-              createDroneMutation.mutate(payload);
-            }}
-          />
-        </SurfaceCard>
+        {showFleetForm ? (
+          <SurfaceCard
+            actions={
+              <span className="muted">
+                Full validation is enforced by the API
+              </span>
+            }
+            title="Add drone"
+          >
+            <DroneRegistryForm
+              key={createSuccessCount}
+              feedback={formFeedback.feedback}
+              isPending={createDroneMutation.isPending}
+              onSubmit={(payload) => {
+                formFeedback.clearFeedback();
+                createDroneMutation.mutate(payload);
+              }}
+            />
+          </SurfaceCard>
+        ) : (
+          <SurfaceCard
+            title="Fleet administration"
+            description="Only managers can register or retire drones in this workspace."
+          >
+            <p className="muted">
+              Your role is <strong>{user?.role}</strong>. Ask a workspace
+              manager if a new aircraft should be added.
+            </p>
+          </SurfaceCard>
+        )}
 
         <DroneRegistryHighlights total={data?.meta.total ?? 0} />
       </section>
@@ -220,7 +226,7 @@ export function DronesPage() {
 
       <div ref={dronesTableAnchorRef}>
         <DronesTable
-          drones={filteredDrones}
+          drones={tableDrones}
           isLoading={isLoading}
           total={data?.meta.total ?? 0}
         />

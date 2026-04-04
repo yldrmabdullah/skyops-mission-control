@@ -2,6 +2,8 @@ import * as bcrypt from 'bcrypt';
 import { faker } from '@faker-js/faker';
 import dataSource from '../data-source';
 import { User } from '../../auth/entities/user.entity';
+import { defaultNotificationPreferences } from '../../auth/notification-preferences.types';
+import { OperatorRole } from '../../auth/operator-role.enum';
 import {
   Drone,
   DroneModel,
@@ -47,9 +49,18 @@ async function seed() {
         email: demoEmail,
         passwordHash: await bcrypt.hash('SkyOpsDemo1', 12),
         fullName: 'Demo Operations',
+        role: OperatorRole.MANAGER,
+        workspaceOwnerId: null,
+        mustChangePassword: false,
+        notificationPreferences: { ...defaultNotificationPreferences },
       }),
     );
-    console.info(`Demo sign-in: ${demoEmail} / SkyOpsDemo1`);
+    console.info(
+      `Demo workspace Manager (seed): ${demoEmail} / SkyOpsDemo1 — invite team from Settings in the app.`,
+    );
+  } else if (demoUser.role !== OperatorRole.MANAGER) {
+    demoUser.role = OperatorRole.MANAGER;
+    await userRepository.save(demoUser);
   }
 
   const drones = await droneRepository.save(

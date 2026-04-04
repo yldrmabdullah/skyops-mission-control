@@ -4,15 +4,28 @@ import {
   applyStoredAccessToken,
   authLogin,
   authMe,
-  authRegister,
+  bootstrapWorkspaceRegister,
   clearStoredSession,
   persistSession,
   readStoredAccessToken,
   setUnauthorizedHandler,
 } from '../lib/api';
 import { queryClient } from '../lib/query-client';
-import type { AuthUser } from '../types/api';
+import type { AuthProfile, AuthUser } from '../types/api';
 import { AuthContext, type AuthStatus } from './auth-context';
+import { markPostAuthWelcome } from './post-auth-welcome';
+
+function profileToUser(profile: AuthProfile): AuthUser {
+  return {
+    id: profile.id,
+    email: profile.email,
+    fullName: profile.fullName,
+    role: profile.role,
+    mustChangePassword: profile.mustChangePassword,
+    workspaceOwnerId: profile.workspaceOwnerId ?? null,
+    notificationPreferences: profile.notificationPreferences,
+  };
+}
 
 function getInitialAuthStatus(): AuthStatus {
   if (typeof window === 'undefined') {
@@ -65,11 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const nextUser: AuthUser = {
-          id: profile.id,
-          email: profile.email,
-          fullName: profile.fullName,
-        };
+        const nextUser = profileToUser(profile);
         const token = readStoredAccessToken() ?? '';
         persistSession(token, nextUser);
         setUser(nextUser);
@@ -90,15 +99,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [status]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const data = await authLogin({ email, password });
+    const data = await authLogin(email, password);
+    markPostAuthWelcome();
     persistSession(data.accessToken, data.user);
     setUser(data.user);
     setStatus('authenticated');
+    return data.user;
   }, []);
 
-  const signUp = useCallback(
+  const bootstrapWorkspace = useCallback(
     async (email: string, password: string, fullName: string) => {
-      const data = await authRegister({ email, password, fullName });
+      const data = await bootstrapWorkspaceRegister(email, password, fullName);
+      markPostAuthWelcome();
       persistSession(data.accessToken, data.user);
       setUser(data.user);
       setStatus('authenticated');
@@ -106,15 +118,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const refreshProfile = useCallback(async () => {
+    const profile = await authMe();
+    const nextUser = profileToUser(profile);
+    const token = readStoredAccessToken() ?? '';
+    persistSession(token, nextUser);
+    setUser(nextUser);
+  }, []);
+
   const value = useMemo(
     () => ({
       status,
       user,
       signIn,
-      signUp,
+      bootstrapWorkspace,
       signOut,
+      refreshProfile,
     }),
-    [status, user, signIn, signUp, signOut],
+    [status, user, signIn, bootstrapWorkspace, signOut, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

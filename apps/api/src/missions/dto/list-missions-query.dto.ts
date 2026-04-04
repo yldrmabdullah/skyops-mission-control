@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { MissionStatus } from '../entities/mission.entity';
 
@@ -23,4 +30,12 @@ export class ListMissionsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Case-insensitive contains on mission name or pilot name',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 }

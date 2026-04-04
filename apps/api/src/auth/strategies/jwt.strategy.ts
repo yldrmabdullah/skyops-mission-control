@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
+import { OperatorRole } from '../operator-role.enum';
 
 export interface JwtPayload {
   sub: string;
@@ -14,6 +15,9 @@ export interface JwtPayload {
 export interface JwtPayloadUser {
   userId: string;
   email: string;
+  role: OperatorRole;
+  /** Fleet / drone / mission scope (manager id for team members, else own id). */
+  fleetOwnerId: string;
 }
 
 @Injectable()
@@ -41,6 +45,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    return { userId: user.id, email: user.email };
+    const fleetOwnerId = user.workspaceOwnerId ?? user.id;
+
+    return {
+      userId: user.id,
+      email: user.email,
+      role: user.role ?? OperatorRole.PILOT,
+      fleetOwnerId,
+    };
   }
 }

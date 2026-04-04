@@ -1,6 +1,6 @@
 # SkyOps Mission Control
 
-Internal **operations console** for a commercial drone fleet: **registry**, **inspection missions** (schedule, lifecycle, reassignment), and **maintenance** logging with rules tied to calendar and flight hours. Operators authenticate with **JWT**; every drone, mission, and log is scoped to the signed-in account.
+Internal **operations console** for a commercial drone fleet: **registry**, **inspection missions** (schedule, lifecycle, reassignment), and **maintenance** logging with rules tied to calendar and flight hours. Access is **JWT**-based: a **workspace Manager** bootstraps the first account (or you use seed/demo data); the Manager then invites **Pilots** and **Technicians** from **Settings**. Fleet data (drones, missions, logs, reports) is scoped to that **workspace** (the Manager’s fleet), not to each user’s personal silo.
 
 Built as a **TypeScript monorepo**: NestJS REST API, React (Vite) SPA, PostgreSQL via TypeORM migrations, Swagger, Jest + Playwright, Docker Compose, GitHub Actions, and **Render** Blueprints (`dev` for integration, `master` for production deploys).
 
@@ -12,7 +12,7 @@ Built as a **TypeScript monorepo**: NestJS REST API, React (Vite) SPA, PostgreSQ
 | **API health**        | [skyops-mission-control-api.onrender.com/api/health](https://skyops-mission-control-api.onrender.com/api/health) |
 | **Swagger (OpenAPI)** | [skyops-mission-control-api.onrender.com/docs](https://skyops-mission-control-api.onrender.com/docs)             |
 
-On Render’s free web tier the API **sleeps after idle time**; the first request after sleep may take **~30–60 seconds**. The hosted database is **not** seeded by default—use **Sign up** on the dashboard or run the seed script against that environment if you need sample data.
+On Render’s free web tier the API **sleeps after idle time**; the first request after sleep may take **~30–60 seconds**. The hosted database is **not** seeded by default. For an empty database, use **Sign up as Manager** on the sign-in screen (when offered) to open **`/sign-up`** (alias **`/workspace/bootstrap`**), or run the **seed** script against that environment if you want demo data and a ready-made Manager login.
 
 ## Documentation map
 
@@ -52,14 +52,18 @@ On Render’s free web tier the API **sleeps after idle time**; the first reques
 
 Single-page app with React Router. Main areas:
 
-| Area              | Route(s)               | Purpose                                                                                          |
-| ----------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| Sign in / sign up | `/sign-in`, `/sign-up` | Email + password; JWT stored for API calls                                                       |
-| Dashboard         | `/dashboard`           | Fleet summary, maintenance watchlist, upcoming missions, recent activity                         |
-| Drone registry    | `/drones`              | List, create drones; filters                                                                     |
-| Drone detail      | `/drones/:id`          | Profile edit, mission and maintenance history, maintenance log form, danger zone (delete/retire) |
-| Missions          | `/missions`            | List, create, edit, reassign, lifecycle transitions                                              |
-| Not found         | `*`                    | 404 for unknown routes                                                                           |
+| Area                       | Route(s)                                      | Purpose                                                                                          |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Sign in                    | `/sign-in`                                    | Email + password; JWT stored for API calls                                                       |
+| Workspace bootstrap        | `/workspace/bootstrap` (`/sign-up` → same)    | **Only when the API reports no users:** create the first **Manager** account                   |
+| First password change      | `/account/change-password`                    | Shown after login when the user must replace a **one-time** password (invited team members)      |
+| Dashboard                  | `/dashboard`                                  | Fleet summary, maintenance watchlist, upcoming missions, recent activity                         |
+| Drone registry             | `/drones`                                     | List, create drones; filters                                                                     |
+| Drone detail               | `/drones/:id`                                 | Profile edit, mission and maintenance history, maintenance log form, danger zone (delete/retire) |
+| Missions                   | `/missions`                                   | List, create, edit, reassign, lifecycle transitions                                              |
+| Settings                   | `/settings`                                   | Profile and password; **Team members** table for everyone; **invites** (Manager only): Pilot / Technician + one-time password |
+| Audit log                  | `/audit`                                      | Operational audit trail                                                                          |
+| Not found                  | `*`                                           | 404 for unknown routes                                                                           |
 
 UI patterns: React Query for server state, toast-style notifications for API feedback, forms co-located with features.
 
@@ -69,7 +73,7 @@ Domain modules (each with entities, DTOs, controllers, services):
 
 | Module        | Responsibility                                                                             |
 | ------------- | ------------------------------------------------------------------------------------------ |
-| `auth`        | Register, login, `GET /me`; bcrypt password hashing; JWT strategy                          |
+| `auth`        | Bootstrap first Manager, login, profile/password, notification prefs, **team** CRUD (invites); bcrypt; JWT; workspace-scoped fleet via `fleetOwnerId` |
 | `drones`      | CRUD, serial validation, status rules, retirement guards, maintenance field calculations   |
 | `missions`    | Scheduling, overlap checks, state machine, completion updates flight hours and maintenance |
 | `maintenance` | Maintenance log CRUD; recalculates drone maintenance fields                                |
@@ -79,7 +83,7 @@ Cross-cutting: global `ValidationPipe`, HTTP exception filter, TypeORM migration
 
 ### Data model (conceptual)
 
-- **User** — owns drones, missions, and maintenance logs (multi-tenant by `ownerId`).
+- **User** — **Manager** (workspace owner) or invited **Pilot** / **Technician**. Drones, missions, and maintenance logs belong to the **workspace** (`ownerId` = the root Manager’s user id). Invited users carry `workspaceOwnerId` pointing at that Manager.
 - **Drone** — serial, model, status, flight hours, last/next maintenance dates, `flightHoursAtLastMaintenance`.
 - **Mission** — type, schedule, pilot, site, status lifecycle, optional abort reason, logged flight hours on completion.
 - **MaintenanceLog** — linked drone, technician, notes, flight hours snapshot, maintenance type.
@@ -105,7 +109,8 @@ Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 - Mission scheduling, mission reassignment, and lifecycle transition controls
 - Maintenance logging with automatic due-date recalculation (calendar and flight-hour thresholds)
 - Fleet health report with overdue maintenance and next-24-hour mission visibility
-- JWT authentication; fleet data scoped per user
+- JWT authentication; fleet data scoped per **workspace** (Manager fleet)
+- Workspace bootstrap, Manager-led invites, and forced password change after one-time credentials
 - API input validation, structured error responses, pagination, filters, and migrations
 - Jest unit/integration coverage plus a Playwright black-box user flow
 - Docker and Render deployment support
@@ -185,10 +190,12 @@ The dashboard is intentionally built as an internal operations tool rather than 
 
 ## Authentication
 
-- **Register** / **login** issue a JWT; the web app sends `Authorization: Bearer <token>` on API requests.
-- Drones, missions, maintenance logs, and reports are filtered by **authenticated user** (`ownerId`).
-- After **seed**, you can sign in as:
-  - **ops@skyops.demo** / **SkyOpsDemo1** (seeded fleet data is owned by this user).
+- **Login** always issues a JWT; the SPA sends `Authorization: Bearer <token>` on API requests.
+- **First user in the database:** `POST /api/auth/register` (and the **`/sign-up`** UI) creates the **workspace Manager** only. There is **no** public self-service choice of Pilot/Technician at registration.
+- **Manager** invites **Pilots** and **Technicians** from **Settings** (`POST /api/auth/team/members`). The API returns a **one-time password** once; the invitee must **change password** after first sign-in (`mustChangePassword` → UI **`/account/change-password`**).
+- Drones, missions, maintenance logs, and reports are filtered by **workspace** (fleet owner), not by the invitee’s user id alone.
+- After **seed**, sign in as the demo **Manager**:
+  - **ops@skyops.demo** / **SkyOpsDemo1** (all seeded fleet data is owned by this workspace).
 
 Playwright uses a dedicated e2e user created by `scripts/start-e2e-api.sh` (not the main seed).
 
@@ -218,7 +225,7 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 ```
 
-Edit `apps/api/.env`: set `JWT_SECRET` (long random string, ≥ 32 characters) and database variables. For Docker Postgres defaults, the examples usually work as-is.
+Edit `apps/api/.env`: set `JWT_SECRET` (long random string, ≥ 32 characters) and database variables. For Docker Postgres defaults, the examples usually work as-is. **`POST /api/auth/register`** is **bootstrap-only**: it succeeds only while **no users exist** and always creates a **Manager**. Additional accounts are created by that Manager via **`POST /api/auth/team/members`** (Pilot or Technician). Use strong secrets and HTTPS in production.
 
 Edit `apps/web/.env`: `VITE_API_BASE_URL` must match where the API is served (default `http://localhost:3000/api`).
 
@@ -337,11 +344,17 @@ Data is varied so filters, dashboard alerts, and detail screens show meaningful 
 
 - `GET /api/health`
 
-**Auth** (no JWT required for register/login)
+**Auth**
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me` (JWT required)
+- `GET /api/auth/status` — public; `{ bootstrapAvailable }` (true only when user count is zero)
+- `POST /api/auth/register` — public; **bootstrap only** (first Manager)
+- `POST /api/auth/login` — public
+- `GET /api/auth/me` — JWT
+- `PATCH /api/auth/me/profile` — JWT
+- `PATCH /api/auth/me/password` — JWT
+- `PATCH /api/auth/me/notification-preferences` — JWT
+- `POST /api/auth/team/members` — JWT, **workspace Manager** only (Pilot/Technician invite)
+- `GET /api/auth/team/members` — JWT, any workspace member (directory: email, name, role; Manager also sees invitee first-sign-in status)
 
 **Domain** (JWT required)
 
@@ -394,12 +407,14 @@ Full tables and troubleshooting: [docs/RENDER.md](docs/RENDER.md).
 
 ## Walkthrough
 
-1. Sign in (after seed, use the operator account printed by the seed script) and open the dashboard (fleet readiness, maintenance alerts).
-2. Register a new drone in the registry.
-3. Schedule a mission for that drone.
-4. Edit the planned mission and confirm reassignment rules (availability, overlap).
-5. Move the mission through its lifecycle to completion and observe maintenance-driven drone status when rules require it.
-6. Open the drone detail page and add a maintenance log to refresh the maintenance window.
+1. **Access:** If the database is empty, open **`/sign-up`** (linked from sign-in when available) and create the **Manager**. If you ran **seed**, sign in as **ops@skyops.demo** / **SkyOpsDemo1**. Invited users sign in with email + one-time password, then complete **Change password**.
+2. **(Optional)** As Manager, open **Settings** and invite a Pilot or Technician; copy the one-time password shown once.
+3. Open the **dashboard** (fleet readiness, maintenance alerts).
+4. **Register** a new drone in the registry.
+5. **Schedule** a mission for that drone.
+6. **Edit** the planned mission and confirm reassignment rules (availability, overlap).
+7. **Move** the mission through its lifecycle to completion and observe maintenance-driven drone status when rules require it.
+8. Open the **drone detail** page and add a maintenance log to refresh the maintenance window.
 
 ## Trade-offs and next steps
 
@@ -409,7 +424,7 @@ Today’s scope includes **JWT authentication**, **per-user data isolation**, an
 
 Plausible extensions:
 
-- Role-based permissions (pilot vs technician vs manager)
+- Finer-grained RBAC or per-resource policies beyond Pilot / Technician / Manager
 - Mission audit trail events
 - File attachments for maintenance evidence
 - Push or email alerts for overdue maintenance and schedule conflicts

@@ -1,5 +1,5 @@
 interface FormNoticeProps {
-  tone: 'success' | 'error' | 'warning';
+  tone: 'success' | 'error' | 'warning' | 'info';
   message: string;
 }
 
