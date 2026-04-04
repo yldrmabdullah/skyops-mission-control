@@ -33,7 +33,6 @@ services:
     name: skyops-mission-control-web-dev
     branch: dev
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @skyops/web build
     staticPublishPath: ./apps/web/dist

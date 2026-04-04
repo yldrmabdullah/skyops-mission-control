@@ -28,11 +28,11 @@ services:
         value: 22
       - key: PORT
         value: 10000
+  # Static sites: do not set plan: free here — Render rejects it for runtime: static (use default / dashboard if needed).
   - type: web
     name: skyops-mission-control-web
     branch: master
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @skyops/web build
     staticPublishPath: ./apps/web/dist

@@ -343,6 +343,8 @@ Provisioned services:
 
 Health check: `GET /api/health`
 
+**Blueprint note:** Render may reject `plan: free` on services with `runtime: static`. The repo’s `render.yaml` omits `plan` for the frontend static site so the Blueprint validates; if the dashboard shows a paid instance type, switch that static site to the free/static-appropriate tier there.
+
 ### Staging (`dev`)
 
 Blueprint: [`render.dev.yaml`](render.dev.yaml). Uses **`branch: dev`** and separate service names plus a **dev database** so staging does not touch production data. Create a **second** Blueprint in Render pointing at `render.dev.yaml`, then verify **`VITE_API_BASE_URL`** matches the dev API URL shown in the dashboard after the first deploy.
