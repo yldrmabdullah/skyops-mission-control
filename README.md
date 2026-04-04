@@ -8,6 +8,7 @@ The solution is built as a TypeScript monorepo with a NestJS REST API, a React d
 
 - [CANDIDATE_CASE_STUDY.md](CANDIDATE_CASE_STUDY.md) — original requirements brief (what was asked for).
 - [docs/BRANCHING.md](docs/BRANCHING.md) — branch naming and GitHub Flow–style workflow.
+- [docs/RENDER.md](docs/RENDER.md) — Render env vars, `VITE_API_BASE_URL`, and post-deploy checklist.
 
 ## What the application contains
 
@@ -350,6 +351,8 @@ Health check: `GET /api/health`
 ### Staging (`dev`)
 
 Blueprint: [`render.dev.yaml`](render.dev.yaml). Uses **`branch: dev`** and separate service names plus a **dev database** so staging does not touch production data. Create a **second** Blueprint in Render pointing at `render.dev.yaml`, then verify **`VITE_API_BASE_URL`** matches the dev API URL shown in the dashboard after the first deploy.
+
+Full tables and troubleshooting: [docs/RENDER.md](docs/RENDER.md).
 
 ## Demo walkthrough suggestion
 
