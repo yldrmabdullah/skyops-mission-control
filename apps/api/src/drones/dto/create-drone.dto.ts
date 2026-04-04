@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   Matches,
+  Max,
   Min,
 } from 'class-validator';
 import { DroneModel, DroneStatus } from '../entities/drone.entity';
@@ -34,6 +35,7 @@ export class CreateDroneDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 1 })
   @Min(0)
+  @Max(1_000_000)
   totalFlightHours?: number;
 
   @ApiProperty({ example: '2026-04-01T08:30:00.000Z' })
@@ -45,5 +47,6 @@ export class CreateDroneDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 1 })
   @Min(0)
+  @Max(1_000_000)
   flightHoursAtLastMaintenance?: number;
 }

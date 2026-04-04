@@ -96,6 +96,55 @@ describe('MissionsService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects transition to the same status', async () => {
+    missionsRepository.findOne.mockResolvedValue({
+      id: 'mission-1',
+      droneId: 'drone-1',
+      status: MissionStatus.PLANNED,
+      drone: { ownerId: OWNER_ID },
+    } as Mission);
+    dronesRepository.findOne.mockResolvedValue({
+      id: 'drone-1',
+      ownerId: OWNER_ID,
+      status: DroneStatus.AVAILABLE,
+    } as Drone);
+
+    await expect(
+      service.transition(
+        'mission-1',
+        { status: MissionStatus.PLANNED },
+        OWNER_ID,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects whitespace-only abort reason', async () => {
+    const mission = {
+      id: 'mission-1',
+      droneId: 'drone-1',
+      status: MissionStatus.IN_PROGRESS,
+      drone: { ownerId: OWNER_ID },
+    } as Mission;
+
+    missionsRepository.findOne.mockResolvedValue(mission);
+    dronesRepository.findOne.mockResolvedValue({
+      id: 'drone-1',
+      ownerId: OWNER_ID,
+      status: DroneStatus.IN_MISSION,
+    } as Drone);
+
+    await expect(
+      service.transition(
+        'mission-1',
+        {
+          status: MissionStatus.ABORTED,
+          abortReason: '   ',
+        },
+        OWNER_ID,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it('requires an abort reason when aborting a mission', async () => {
     const mission = {
       id: 'mission-1',
