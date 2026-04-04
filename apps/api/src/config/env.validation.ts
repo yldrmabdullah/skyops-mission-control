@@ -16,6 +16,8 @@ class EnvironmentVariables {
   @IsString()
   DATABASE_URL?: string;
 
+  /** Used with discrete vars when `DATABASE_URL` is unset (e.g. local Docker). */
+  @IsOptional()
   @IsString()
   DATABASE_HOST?: string;
 
@@ -23,12 +25,15 @@ class EnvironmentVariables {
   @IsInt()
   DATABASE_PORT?: number;
 
+  @IsOptional()
   @IsString()
   DATABASE_USERNAME?: string;
 
+  @IsOptional()
   @IsString()
   DATABASE_PASSWORD?: string;
 
+  @IsOptional()
   @IsString()
   DATABASE_NAME?: string;
 
