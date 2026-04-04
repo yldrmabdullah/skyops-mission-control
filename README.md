@@ -345,6 +345,8 @@ Health check: `GET /api/health`
 
 **Blueprint note:** Render may reject `plan: free` on services with `runtime: static`. The repo’s `render.yaml` omits `plan` for the frontend static site so the Blueprint validates; if the dashboard shows a paid instance type, switch that static site to the free/static-appropriate tier there.
 
+**Free web service RAM (~512MB):** Blueprint build/start commands use a scoped `pnpm install` (`--filter @skyops/api...` / `@skyops/web...`), a capped Node heap for builds, and **no separate `migration:run`** (migrations run when the API boots via TypeORM `migrationsRun`). If deploys still hit OOM, upgrade the API to a paid instance or build in CI and deploy a container artifact.
+
 ### Staging (`dev`)
 
 Blueprint: [`render.dev.yaml`](render.dev.yaml). Uses **`branch: dev`** and separate service names plus a **dev database** so staging does not touch production data. Create a **second** Blueprint in Render pointing at `render.dev.yaml`, then verify **`VITE_API_BASE_URL`** matches the dev API URL shown in the dashboard after the first deploy.
