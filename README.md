@@ -4,7 +4,7 @@ Internal **operations console** for a commercial drone fleet: **registry**, **in
 
 Built as a **TypeScript monorepo**: NestJS REST API, React (Vite) SPA, PostgreSQL via TypeORM migrations, Swagger, Jest + Playwright, Docker Compose, GitHub Actions, and **Render** Blueprints (`dev` for integration, `master` for production deploys).
 
-## Live demo (Render)
+## Live environment (Render)
 
 | Resource              | URL                                                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -12,22 +12,21 @@ Built as a **TypeScript monorepo**: NestJS REST API, React (Vite) SPA, PostgreSQ
 | **API health**        | [skyops-mission-control-api.onrender.com/api/health](https://skyops-mission-control-api.onrender.com/api/health) |
 | **Swagger (OpenAPI)** | [skyops-mission-control-api.onrender.com/docs](https://skyops-mission-control-api.onrender.com/docs)             |
 
-On Render’s free web tier the API **sleeps after idle time**; the first request after sleep may take **~30–60 seconds**. Production has **no pre-seeded demo user** unless you run seed against that database—use **Sign up** on the live dashboard to create an account.
+On Render’s free web tier the API **sleeps after idle time**; the first request after sleep may take **~30–60 seconds**. The hosted database is **not** seeded by default—use **Sign up** on the dashboard or run the seed script against that environment if you need sample data.
 
 ## Documentation map
 
-| Document                                           | What it covers                                                                | When to open it                                                            |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **This README**                                    | Full product + stack summary, local/Docker run, tests, CI, deploy overview    | Onboarding, running the project, understanding what shipped                |
-| [docs/BRANCHING.md](docs/BRANCHING.md)             | `dev` vs `master`, `feature/*` / `fix/*` / `chore/*`, release & Render wiring | Creating branches, PRs, merging to prod                                    |
-| [docs/RENDER.md](docs/RENDER.md)                   | Env vars (`DATABASE_URL`, `VITE_API_BASE_URL`), Blueprint quirks, checklists  | Deploying or debugging Render (URLs, rebuild static site after API rename) |
-| [CANDIDATE_CASE_STUDY.md](CANDIDATE_CASE_STUDY.md) | Original case-study brief (requirements only)                                 | Comparing spec to implementation                                           |
-| [apps/api/README.md](apps/api/README.md)           | API-only pnpm commands                                                        | Working inside `apps/api`                                                  |
-| [apps/web/README.md](apps/web/README.md)           | Web-only pnpm commands                                                        | Working inside `apps/web`                                                  |
+| Document                                 | What it covers                                                                | When to open it                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **This README**                          | Full product + stack summary, local/Docker run, tests, CI, deploy overview    | Onboarding, running the project, understanding what shipped                |
+| [docs/BRANCHING.md](docs/BRANCHING.md)   | `dev` vs `master`, `feature/*` / `fix/*` / `chore/*`, release & Render wiring | Creating branches, PRs, merging to prod                                    |
+| [docs/RENDER.md](docs/RENDER.md)         | Env vars (`DATABASE_URL`, `VITE_API_BASE_URL`), Blueprint quirks, checklists  | Deploying or debugging Render (URLs, rebuild static site after API rename) |
+| [apps/api/README.md](apps/api/README.md) | API-only pnpm commands                                                        | Working inside `apps/api`                                                  |
+| [apps/web/README.md](apps/web/README.md) | Web-only pnpm commands                                                        | Working inside `apps/web`                                                  |
 
 ## Contents
 
-- [Live demo (Render)](#live-demo-render)
+- [Live environment (Render)](#live-environment-render)
 - [Documentation map](#documentation-map)
 - [What the application contains](#what-the-application-contains)
 - [Tech stack](#tech-stack)
@@ -44,7 +43,7 @@ On Render’s free web tier the API **sleeps after idle time**; the first reques
 - [API surface](#api-surface)
 - [CI](#ci)
 - [Deployment (Render)](#free-deployment-render)
-- [Demo walkthrough](#demo-walkthrough-suggestion)
+- [Walkthrough](#walkthrough)
 - [Trade-offs and next steps](#trade-offs-and-next-steps)
 
 ## What the application contains
@@ -182,14 +181,14 @@ Key backend decisions:
 
 ### Frontend
 
-The dashboard is intentionally built as an internal operations tool rather than a marketing UI. The focus is fast scanning, clear operational status, direct access to critical actions, and low friction during demos.
+The dashboard is intentionally built as an internal operations tool rather than a marketing UI. The focus is fast scanning, clear operational status, direct access to critical actions, and low friction during day-to-day operations.
 
 ## Authentication
 
 - **Register** / **login** issue a JWT; the web app sends `Authorization: Bearer <token>` on API requests.
 - Drones, missions, maintenance logs, and reports are filtered by **authenticated user** (`ownerId`).
 - After **seed**, you can sign in as:
-  - **ops@skyops.demo** / **SkyOpsDemo1** (demo fleet data is owned by this user).
+  - **ops@skyops.demo** / **SkyOpsDemo1** (seeded fleet data is owned by this user).
 
 Playwright uses a dedicated e2e user created by `scripts/start-e2e-api.sh` (not the main seed).
 
@@ -235,13 +234,13 @@ docker compose up postgres -d
 pnpm --filter @skyops/api migration:run
 ```
 
-### 5. Seed demo data
+### 5. Seed sample data
 
 ```bash
 pnpm --filter @skyops/api seed
 ```
 
-The seed prints demo sign-in credentials and creates sample drones, missions, and maintenance logs.
+The seed prints operator sign-in credentials and creates sample drones, missions, and maintenance logs.
 
 ### 6. Start the full stack
 
@@ -330,7 +329,7 @@ The seed script creates realistic operational data:
 - 50 missions
 - 30 maintenance logs
 
-Data is varied so filters, dashboard alerts, and detail screens show meaningful states. A demo **User** is created or reused for `ops@skyops.demo`.
+Data is varied so filters, dashboard alerts, and detail screens show meaningful states. A **User** is created or reused for `ops@skyops.demo`.
 
 ## API surface
 
@@ -363,7 +362,7 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ## Free deployment (Render)
 
-**Current production URLs** are listed under [Live demo (Render)](#live-demo-render). To change hostnames, update the static site’s **`VITE_API_BASE_URL`** and redeploy the frontend (build-time env).
+**Current production URLs** are listed under [Live environment (Render)](#live-environment-render). To change hostnames, update the static site’s **`VITE_API_BASE_URL`** and redeploy the frontend (build-time env).
 
 ### Production (`master`)
 
@@ -393,27 +392,25 @@ Blueprint: [`render.dev.yaml`](render.dev.yaml). Uses **`branch: dev`** and sepa
 
 Full tables and troubleshooting: [docs/RENDER.md](docs/RENDER.md).
 
-## Demo walkthrough suggestion
+## Walkthrough
 
-1. Sign in as the demo user and open the dashboard (fleet readiness, maintenance alerts).
-2. Create a new drone in the registry.
+1. Sign in (after seed, use the operator account printed by the seed script) and open the dashboard (fleet readiness, maintenance alerts).
+2. Register a new drone in the registry.
 3. Schedule a mission for that drone.
-4. Show planned mission editing and reassignment constraints.
-5. Transition the mission to completion and show the drone moving into maintenance when rules require it.
-6. Open the drone detail page and add a maintenance log to reset the maintenance window.
+4. Edit the planned mission and confirm reassignment rules (availability, overlap).
+5. Move the mission through its lifecycle to completion and observe maintenance-driven drone status when rules require it.
+6. Open the drone detail page and add a maintenance log to refresh the maintenance window.
 
 ## Trade-offs and next steps
 
-Implemented beyond the original brief in places: **JWT authentication**, **per-user data isolation**, and operational polish on the dashboard.
+Today’s scope includes **JWT authentication**, **per-user data isolation**, and an operations-oriented dashboard. The architecture is modular by domain (`auth`, `drones`, `missions`, `maintenance`, `reports`) so new behavior can land in the right service without cross-cutting rewrites.
 
-Reasonable next increments:
+**Priorities for changes:** keep domain rules and migrations explicit, extend tests when you change transitions or maintenance math, and preserve deployability (health checks, env validation, Blueprint-friendly commands).
+
+Plausible extensions:
 
 - Role-based permissions (pilot vs technician vs manager)
 - Mission audit trail events
 - File attachments for maintenance evidence
-- Push/email alerts for overdue maintenance and schedule conflicts
+- Push or email alerts for overdue maintenance and schedule conflicts
 - Deeper analytics (flight-hour trends, technician workload)
-
-## Submission note
-
-This implementation prioritizes correctness of business rules, testability, and demo readiness. The codebase is structured to make a live walkthrough, feature extension, or debugging exercise straightforward.
