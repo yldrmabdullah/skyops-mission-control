@@ -6,6 +6,12 @@ test('creates a drone, schedules a mission, transitions it, and reflects the fle
   const uniqueSerial = `SKY-E${Date.now().toString().slice(-3)}-A1B2`;
   const missionName = `E2E Mission ${Date.now().toString().slice(-5)}`;
 
+  await page.goto('/sign-in');
+  await page.getByTestId('signin-email-input').fill('e2e@skyops.test');
+  await page.getByTestId('signin-password-input').fill('E2eTestPass1');
+  await page.getByTestId('signin-submit').click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
   await page.goto('/drones');
 
   await page.getByTestId('drone-serial-input').fill(uniqueSerial);
@@ -19,9 +25,16 @@ test('creates a drone, schedules a mission, transitions it, and reflects the fle
   await page.goto('/missions');
 
   await page.getByTestId('mission-name-input').fill(missionName);
+  const droneOptionValue = await page
+    .getByTestId('mission-drone-select')
+    .locator(`option:has-text("${uniqueSerial}")`)
+    .getAttribute('value');
+
+  expect(droneOptionValue).toBeTruthy();
+
   await page
     .getByTestId('mission-drone-select')
-    .selectOption({ label: uniqueSerial });
+    .selectOption(droneOptionValue as string);
   await page.getByLabel('Pilot name').fill('E2E Pilot');
   await page.getByLabel('Site location').fill('Hamburg, Germany');
   await page.getByTestId('create-mission-submit').click();

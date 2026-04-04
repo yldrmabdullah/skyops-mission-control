@@ -2,10 +2,13 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   Unique,
 } from 'typeorm';
+import { User } from '../../auth/entities/user.entity';
 import { MaintenanceLog } from '../../maintenance/entities/maintenance-log.entity';
 import { Mission } from '../../missions/entities/mission.entity';
 import { numericTransformer } from '../../database/numeric.transformer';
@@ -24,10 +27,17 @@ export enum DroneStatus {
 }
 
 @Entity({ name: 'drones' })
-@Unique(['serialNumber'])
+@Unique(['ownerId', 'serialNumber'])
 export class Drone {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'uuid' })
+  ownerId!: string;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'ownerId' })
+  owner!: User;
 
   @Column({ type: 'varchar', length: 50 })
   serialNumber!: string;

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { DataType, newDb } from 'pg-mem';
+import { User } from '../src/auth/entities/user.entity';
 import {
   Drone,
   DroneModel,
@@ -22,6 +23,7 @@ describe('Mission lifecycle integration', () => {
   let droneRepository: Repository<Drone>;
   let missionRepository: Repository<Mission>;
   let maintenanceLogRepository: Repository<MaintenanceLog>;
+  let ownerId: string;
 
   beforeEach(async () => {
     const database = newDb({
@@ -47,7 +49,7 @@ describe('Mission lifecycle integration', () => {
 
     dataSource = database.adapters.createTypeormDataSource({
       type: 'postgres',
-      entities: [Drone, Mission, MaintenanceLog],
+      entities: [User, Drone, Mission, MaintenanceLog],
       synchronize: true,
     }) as DataSource;
 
@@ -56,6 +58,16 @@ describe('Mission lifecycle integration', () => {
     droneRepository = dataSource.getRepository(Drone);
     missionRepository = dataSource.getRepository(Mission);
     maintenanceLogRepository = dataSource.getRepository(MaintenanceLog);
+    const userRepository = dataSource.getRepository(User);
+
+    const owner = await userRepository.save(
+      userRepository.create({
+        email: 'integration@test.local',
+        passwordHash: 'x',
+        fullName: 'Integration',
+      }),
+    );
+    ownerId = owner.id;
 
     dronesService = new DronesService(
       droneRepository,
@@ -70,34 +82,52 @@ describe('Mission lifecycle integration', () => {
   });
 
   it('creates a drone, schedules a mission, completes it, and updates maintenance state', async () => {
-    const drone = await dronesService.create({
-      serialNumber: 'SKY-A1B2-C3D4',
-      model: DroneModel.MATRICE_300,
-      totalFlightHours: 49,
-      flightHoursAtLastMaintenance: 0,
-      lastMaintenanceDate: '2026-03-01T00:00:00.000Z',
-    });
+    const drone = await dronesService.create(
+      {
+        serialNumber: 'SKY-A1B2-C3D4',
+        model: DroneModel.MATRICE_300,
+        totalFlightHours: 49,
+        flightHoursAtLastMaintenance: 0,
+        lastMaintenanceDate: '2026-03-01T00:00:00.000Z',
+      },
+      ownerId,
+    );
 
-    const mission = await missionsService.create({
-      name: 'Turbine inspection alpha',
-      type: MissionType.WIND_TURBINE_INSPECTION,
-      droneId: drone.id,
-      pilotName: 'Amelia Stone',
-      siteLocation: 'Hamburg, Germany',
-      plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-    });
+    const mission = await missionsService.create(
+      {
+        name: 'Turbine inspection alpha',
+        type: MissionType.WIND_TURBINE_INSPECTION,
+        droneId: drone.id,
+        pilotName: 'Amelia Stone',
+        siteLocation: 'Hamburg, Germany',
+        plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      },
+      ownerId,
+    );
 
-    await missionsService.transition(mission.id, {
-      status: MissionStatus.PRE_FLIGHT_CHECK,
-    });
-    await missionsService.transition(mission.id, {
-      status: MissionStatus.IN_PROGRESS,
-    });
-    const completedMission = await missionsService.transition(mission.id, {
-      status: MissionStatus.COMPLETED,
-      flightHoursLogged: 2,
-    });
+    await missionsService.transition(
+      mission.id,
+      {
+        status: MissionStatus.PRE_FLIGHT_CHECK,
+      },
+      ownerId,
+    );
+    await missionsService.transition(
+      mission.id,
+      {
+        status: MissionStatus.IN_PROGRESS,
+      },
+      ownerId,
+    );
+    const completedMission = await missionsService.transition(
+      mission.id,
+      {
+        status: MissionStatus.COMPLETED,
+        flightHoursLogged: 2,
+      },
+      ownerId,
+    );
 
     const updatedDrone = await droneRepository.findOneByOrFail({
       id: drone.id,

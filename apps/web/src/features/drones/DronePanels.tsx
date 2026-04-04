@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { EmptyState, SurfaceCard } from '../../components/SurfaceCard';
 import { StatusPill } from '../../components/StatusPill';
 import type { Drone } from '../../types/api';
 import { formatEnumLabel } from './drone-detail.utils';
@@ -9,9 +10,8 @@ interface DroneSummaryPanelProps {
 
 export function DroneSummaryPanel({ drone }: DroneSummaryPanelProps) {
   return (
-    <article className="card">
-      <h3>Profile summary</h3>
-      <div className="list" style={{ marginTop: '1rem' }}>
+    <SurfaceCard title="Profile summary">
+      <div className="list">
         <div className="list-row">
           <span>Model</span>
           <strong>{formatEnumLabel(drone.model)}</strong>
@@ -33,7 +33,7 @@ export function DroneSummaryPanel({ drone }: DroneSummaryPanelProps) {
           </strong>
         </div>
       </div>
-    </article>
+    </SurfaceCard>
   );
 }
 
@@ -45,9 +45,8 @@ export function MaintenanceHistoryPanel({
   drone,
 }: MaintenanceHistoryPanelProps) {
   return (
-    <article className="card">
-      <h3>Maintenance history</h3>
-      <div className="list" style={{ marginTop: '1rem' }}>
+    <SurfaceCard title="Maintenance history">
+      <div className="list">
         {drone.maintenanceLogs?.length ? (
           drone.maintenanceLogs.map((log) => (
             <div className="list-row" key={log.id}>
@@ -64,10 +63,10 @@ export function MaintenanceHistoryPanel({
             </div>
           ))
         ) : (
-          <div className="empty-state">No maintenance logs recorded yet.</div>
+          <EmptyState>No maintenance logs recorded yet.</EmptyState>
         )}
       </div>
-    </article>
+    </SurfaceCard>
   );
 }
 
@@ -77,9 +76,8 @@ interface MissionHistoryPanelProps {
 
 export function MissionHistoryPanel({ drone }: MissionHistoryPanelProps) {
   return (
-    <article className="card">
-      <h3>Mission history</h3>
-      <div className="list" style={{ marginTop: '1rem' }}>
+    <SurfaceCard title="Mission history">
+      <div className="list">
         {drone.missions?.length ? (
           drone.missions.map((mission) => (
             <div className="list-row" key={mission.id}>
@@ -94,9 +92,9 @@ export function MissionHistoryPanel({ drone }: MissionHistoryPanelProps) {
             </div>
           ))
         ) : (
-          <div className="empty-state">No mission history available yet.</div>
+          <EmptyState>No mission history available yet.</EmptyState>
         )}
       </div>
-    </article>
+    </SurfaceCard>
   );
 }

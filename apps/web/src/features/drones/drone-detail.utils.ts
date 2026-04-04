@@ -1,4 +1,5 @@
 import { formatEnumLabel, toDateInputValue } from '../../lib/format';
+import { parseLocaleDecimal } from '../../lib/locale-number';
 import type {
   CreateMaintenanceLogPayload,
   Drone,
@@ -40,8 +41,8 @@ export function createDroneProfilePayload(formState: {
     serialNumber: formState.serialNumber.trim().toUpperCase(),
     model: formState.model,
     status: formState.status,
-    totalFlightHours: Number(formState.totalFlightHours),
-    flightHoursAtLastMaintenance: Number(
+    totalFlightHours: parseLocaleDecimal(formState.totalFlightHours),
+    flightHoursAtLastMaintenance: parseLocaleDecimal(
       formState.flightHoursAtLastMaintenance,
     ),
     lastMaintenanceDate: new Date(
@@ -83,7 +84,9 @@ export function createMaintenanceLogPayload(
     technicianName: formState.technicianName.trim(),
     notes: formState.notes.trim() || undefined,
     performedAt: new Date(`${formState.performedAt}T00:00:00`).toISOString(),
-    flightHoursAtMaintenance: Number(formState.flightHoursAtMaintenance),
+    flightHoursAtMaintenance: parseLocaleDecimal(
+      formState.flightHoursAtMaintenance,
+    ),
   };
 }
 

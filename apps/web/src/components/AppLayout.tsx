@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../auth/use-auth';
 
 const navigationItems = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -7,6 +8,8 @@ const navigationItems = [
 ];
 
 export function AppLayout() {
+  const { user, signOut } = useAuth();
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -19,7 +22,8 @@ export function AppLayout() {
           </p>
         </div>
 
-        <nav className="nav-list">
+        <nav className="nav-list" aria-label="Main">
+          <p className="nav-section-label">Workspace</p>
           {navigationItems.map((item) => (
             <NavLink
               key={item.to}
@@ -32,6 +36,21 @@ export function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="sidebar-account">
+          <div className="sidebar-account-meta">
+            <span className="muted sidebar-account-label">Signed in</span>
+            <strong className="sidebar-account-name">{user?.fullName}</strong>
+            <span className="muted sidebar-account-email">{user?.email}</span>
+          </div>
+          <button
+            className="button secondary sidebar-signout"
+            type="button"
+            onClick={() => signOut()}
+          >
+            Sign out
+          </button>
+        </div>
       </aside>
 
       <main className="content">

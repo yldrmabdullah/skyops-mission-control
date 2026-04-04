@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DateInput } from '../../components/DateInput';
 import { FormNotice } from '../../components/FormNotice';
 import { formatEnumLabel } from '../../lib/format';
 import type { CreateMissionPayload, Drone, Mission } from '../../types/api';
@@ -140,37 +141,33 @@ export function MissionPlanForm({
       </div>
 
       <div className="form-row">
-        <label className="field">
-          <span className="field-label">Planned start</span>
-          <input
-            required
-            className="input"
-            type="datetime-local"
-            value={formState.plannedStart}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                plannedStart: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <DateInput
+          compact
+          label="Planned start"
+          required
+          type="datetime-local"
+          value={formState.plannedStart}
+          onChange={(value) =>
+            setFormState((currentState) => ({
+              ...currentState,
+              plannedStart: value,
+            }))
+          }
+        />
 
-        <label className="field">
-          <span className="field-label">Planned end</span>
-          <input
-            required
-            className="input"
-            type="datetime-local"
-            value={formState.plannedEnd}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                plannedEnd: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <DateInput
+          compact
+          label="Planned end"
+          required
+          type="datetime-local"
+          value={formState.plannedEnd}
+          onChange={(value) =>
+            setFormState((currentState) => ({
+              ...currentState,
+              plannedEnd: value,
+            }))
+          }
+        />
       </div>
 
       {feedback ? (

@@ -5,8 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { buildPaginationMeta } from '../common/utils/pagination';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
 import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
+import { resolveDroneStatusAfterMaintenance } from '../drones/utils/drone-rules';
 import { CreateMaintenanceLogDto } from './dto/create-maintenance-log.dto';
 import { ListMaintenanceLogsQueryDto } from './dto/list-maintenance-logs-query.dto';
 import { MaintenanceLog } from './entities/maintenance-log.entity';
@@ -22,9 +24,12 @@ export class MaintenanceService {
     private readonly dronesRepository: Repository<Drone>,
   ) {}
 
-  async create(createMaintenanceLogDto: CreateMaintenanceLogDto) {
+  async create(
+    createMaintenanceLogDto: CreateMaintenanceLogDto,
+    ownerId: string,
+  ) {
     const drone = await this.dronesRepository.findOne({
-      where: { id: createMaintenanceLogDto.droneId },
+      where: { id: createMaintenanceLogDto.droneId, ownerId },
     });
 
     if (!drone) {
@@ -62,20 +67,18 @@ export class MaintenanceService {
     drone.flightHoursAtLastMaintenance =
       createMaintenanceLogDto.flightHoursAtMaintenance;
     drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(performedAt);
-    drone.status =
-      drone.status === DroneStatus.RETIRED
-        ? DroneStatus.RETIRED
-        : DroneStatus.AVAILABLE;
+    drone.status = resolveDroneStatusAfterMaintenance(drone.status);
 
     await this.dronesRepository.save(drone);
 
     return this.maintenanceLogsRepository.save(maintenanceLog);
   }
 
-  async findAll(query: ListMaintenanceLogsQueryDto) {
+  async findAll(query: ListMaintenanceLogsQueryDto, ownerId: string) {
     const queryBuilder = this.maintenanceLogsRepository
       .createQueryBuilder('maintenanceLog')
       .leftJoinAndSelect('maintenanceLog.drone', 'drone')
+      .andWhere('drone.ownerId = :ownerId', { ownerId })
       .orderBy('maintenanceLog.performedAt', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -102,12 +105,7 @@ export class MaintenanceService {
 
     return {
       data,
-      meta: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
+      meta: buildPaginationMeta(query.page, query.limit, total),
     };
   }
 }

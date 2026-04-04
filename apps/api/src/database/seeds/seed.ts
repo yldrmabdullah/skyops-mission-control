@@ -1,5 +1,7 @@
+import * as bcrypt from 'bcrypt';
 import { faker } from '@faker-js/faker';
 import dataSource from '../data-source';
+import { User } from '../../auth/entities/user.entity';
 import {
   Drone,
   DroneModel,
@@ -30,10 +32,25 @@ async function seed() {
   const droneRepository = dataSource.getRepository(Drone);
   const missionRepository = dataSource.getRepository(Mission);
   const maintenanceRepository = dataSource.getRepository(MaintenanceLog);
+  const userRepository = dataSource.getRepository(User);
 
   await maintenanceRepository.clear();
   await missionRepository.clear();
   await droneRepository.clear();
+
+  const demoEmail = 'ops@skyops.demo';
+  let demoUser = await userRepository.findOne({ where: { email: demoEmail } });
+
+  if (!demoUser) {
+    demoUser = await userRepository.save(
+      userRepository.create({
+        email: demoEmail,
+        passwordHash: await bcrypt.hash('SkyOpsDemo1', 12),
+        fullName: 'Demo Operations',
+      }),
+    );
+    console.info(`Demo sign-in: ${demoEmail} / SkyOpsDemo1`);
+  }
 
   const drones = await droneRepository.save(
     Array.from({ length: 20 }, () => {
@@ -53,6 +70,7 @@ async function seed() {
       const lastMaintenanceDate = faker.date.recent({ days: 75 });
 
       return droneRepository.create({
+        ownerId: demoUser.id,
         serialNumber: createSerialNumber(),
         model: faker.helpers.arrayElement(droneModels),
         status: DroneStatus.AVAILABLE,

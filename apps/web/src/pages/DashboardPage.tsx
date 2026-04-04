@@ -3,24 +3,66 @@ import { format } from 'date-fns';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PriorityPill } from '../components/PriorityPill';
+import { StatePanel } from '../components/StatePanel';
 import { StatusPill } from '../components/StatusPill';
-import { fetchDrones, fetchFleetHealthReport, fetchMissions } from '../lib/api';
+import { EmptyState, SurfaceCard } from '../components/SurfaceCard';
+import {
+  fetchDrones,
+  fetchFleetHealthReport,
+  fetchMissions,
+  getErrorMessage,
+} from '../lib/api';
 import { formatEnumLabel } from '../lib/format';
 
 export function DashboardPage() {
   const [referenceNow] = useState(() => Date.now());
-  const { data: fleetHealth } = useQuery({
+  const fleetHealthQuery = useQuery({
     queryKey: ['fleet-health'],
     queryFn: fetchFleetHealthReport,
   });
-  const { data: dronesResponse } = useQuery({
+  const dronesQuery = useQuery({
     queryKey: ['drones', 'dashboard'],
     queryFn: () => fetchDrones(),
   });
-  const { data: missionsResponse } = useQuery({
+  const missionsQuery = useQuery({
     queryKey: ['missions', 'dashboard'],
     queryFn: () => fetchMissions(),
   });
+  const fleetHealth = fleetHealthQuery.data;
+  const dronesResponse = dronesQuery.data;
+  const missionsResponse = missionsQuery.data;
+
+  if (
+    fleetHealthQuery.isLoading ||
+    dronesQuery.isLoading ||
+    missionsQuery.isLoading
+  ) {
+    return (
+      <StatePanel
+        description="Fleet metrics, drone readiness, and mission activity are loading."
+        title="Preparing mission control"
+      />
+    );
+  }
+
+  if (
+    fleetHealthQuery.isError ||
+    dronesQuery.isError ||
+    missionsQuery.isError
+  ) {
+    const error =
+      fleetHealthQuery.error ?? dronesQuery.error ?? missionsQuery.error;
+
+    return (
+      <StatePanel
+        actionHref="/dashboard"
+        actionLabel="Retry from dashboard"
+        description={getErrorMessage(error)}
+        title="Unable to load the dashboard"
+        tone="error"
+      />
+    );
+  }
 
   const drones = dronesResponse?.data ?? [];
   const missions = missionsResponse?.data ?? [];
@@ -111,19 +153,16 @@ export function DashboardPage() {
         </article>
       </section>
 
-      <section className="panel-grid split" style={{ marginTop: '1rem' }}>
-        <article className="card">
-          <div className="card-header">
-            <div>
-              <h3>Maintenance watchlist</h3>
-              <p className="card-subtitle">
-                Drones due in the next 7 days, sorted by urgency.
-              </p>
-            </div>
+      <section className="panel-grid split section-spaced">
+        <SurfaceCard
+          actions={
             <Link className="badge" to="/drones">
               Review fleet
             </Link>
-          </div>
+          }
+          description="Drones due in the next 7 days, sorted by urgency."
+          title="Maintenance watchlist"
+        >
           <div className="list">
             {maintenanceAlerts.length ? (
               maintenanceAlerts.map((drone) => {
@@ -155,23 +194,18 @@ export function DashboardPage() {
                 );
               })
             ) : (
-              <div className="empty-state">
-                No maintenance risk in the next 7 days.
-              </div>
+              <EmptyState>No maintenance risk in the next 7 days.</EmptyState>
             )}
           </div>
-        </article>
+        </SurfaceCard>
 
-        <article className="card">
-          <div className="card-header">
-            <div>
-              <h3>Upcoming missions</h3>
-              <p className="card-subtitle">
-                The next flights leaving the schedule board.
-              </p>
-            </div>
+        <SurfaceCard
+          actions={
             <span className="badge">{upcomingMissions.length} visible</span>
-          </div>
+          }
+          description="The next flights leaving the schedule board."
+          title="Upcoming missions"
+        >
           <div className="list">
             {upcomingMissions.length ? (
               upcomingMissions.map((mission) => (
@@ -190,24 +224,19 @@ export function DashboardPage() {
                 </div>
               ))
             ) : (
-              <div className="empty-state">
+              <EmptyState>
                 No upcoming missions in the current result set.
-              </div>
+              </EmptyState>
             )}
           </div>
-        </article>
+        </SurfaceCard>
       </section>
 
-      <section className="panel-grid split" style={{ marginTop: '1rem' }}>
-        <article className="card">
-          <div className="card-header">
-            <div>
-              <h3>Status distribution</h3>
-              <p className="card-subtitle">
-                Current fleet posture across availability and maintenance.
-              </p>
-            </div>
-          </div>
+      <section className="panel-grid split section-spaced">
+        <SurfaceCard
+          description="Current fleet posture across availability and maintenance."
+          title="Status distribution"
+        >
           <div className="list">
             {Object.entries(fleetHealth?.statusBreakdown ?? {}).map(
               ([status, count]) => (
@@ -218,17 +247,12 @@ export function DashboardPage() {
               ),
             )}
           </div>
-        </article>
+        </SurfaceCard>
 
-        <article className="card">
-          <div className="card-header">
-            <div>
-              <h3>Recent mission activity</h3>
-              <p className="card-subtitle">
-                A quick read on recently completed or recently scheduled work.
-              </p>
-            </div>
-          </div>
+        <SurfaceCard
+          description="A quick read on recently completed or recently scheduled work."
+          title="Recent mission activity"
+        >
           <div className="list">
             {recentMissions.length ? (
               recentMissions.map((mission) => (
@@ -247,12 +271,10 @@ export function DashboardPage() {
                 </div>
               ))
             ) : (
-              <div className="empty-state">
-                Mission activity will appear here.
-              </div>
+              <EmptyState>Mission activity will appear here.</EmptyState>
             )}
           </div>
-        </article>
+        </SurfaceCard>
       </section>
     </>
   );

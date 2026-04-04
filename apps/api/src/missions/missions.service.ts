@@ -5,8 +5,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { buildPaginationMeta } from '../common/utils/pagination';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
-import { isMaintenanceDue } from '../drones/utils/maintenance.utils';
+import { resolveDroneStatusAfterMissionCompletion } from '../drones/utils/drone-rules';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
 import { TransitionMissionDto } from './dto/transition-mission.dto';
@@ -23,37 +24,12 @@ export class MissionsService {
     private readonly dronesRepository: Repository<Drone>,
   ) {}
 
-  async create(createMissionDto: CreateMissionDto) {
-    const drone = await this.dronesRepository.findOne({
-      where: { id: createMissionDto.droneId },
-    });
-
-    if (!drone) {
-      throw new NotFoundException(
-        `Drone ${createMissionDto.droneId} was not found.`,
-      );
-    }
-
-    if (drone.status !== DroneStatus.AVAILABLE) {
-      throw new BadRequestException(
-        'Only drones with AVAILABLE status can be assigned to missions.',
-      );
-    }
-
+  async create(createMissionDto: CreateMissionDto, ownerId: string) {
     const plannedStart = new Date(createMissionDto.plannedStart);
     const plannedEnd = new Date(createMissionDto.plannedEnd);
 
-    if (plannedStart.getTime() < Date.now()) {
-      throw new BadRequestException(
-        'Missions cannot be scheduled in the past.',
-      );
-    }
-
-    if (plannedStart.getTime() >= plannedEnd.getTime()) {
-      throw new BadRequestException(
-        'Mission planned end must be after planned start.',
-      );
-    }
+    await this.getAvailableDroneOrThrow(createMissionDto.droneId, ownerId);
+    this.assertValidPlannedWindow(plannedStart, plannedEnd);
 
     await this.assertNoOverlap(
       createMissionDto.droneId,
@@ -71,10 +47,11 @@ export class MissionsService {
     return this.missionsRepository.save(mission);
   }
 
-  async findAll(query: ListMissionsQueryDto) {
+  async findAll(query: ListMissionsQueryDto, ownerId: string) {
     const queryBuilder = this.missionsRepository
       .createQueryBuilder('mission')
       .leftJoinAndSelect('mission.drone', 'drone')
+      .andWhere('drone.ownerId = :ownerId', { ownerId })
       .orderBy('mission.plannedStart', 'ASC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -107,16 +84,11 @@ export class MissionsService {
 
     return {
       data,
-      meta: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
+      meta: buildPaginationMeta(query.page, query.limit, total),
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, ownerId: string) {
     const mission = await this.missionsRepository.findOne({
       where: { id },
       relations: { drone: true },
@@ -126,11 +98,19 @@ export class MissionsService {
       throw new NotFoundException(`Mission ${id} was not found.`);
     }
 
+    if (mission.drone.ownerId !== ownerId) {
+      throw new NotFoundException(`Mission ${id} was not found.`);
+    }
+
     return mission;
   }
 
-  async update(id: string, updateMissionDto: UpdateMissionDto) {
-    const mission = await this.findOne(id);
+  async update(
+    id: string,
+    updateMissionDto: UpdateMissionDto,
+    ownerId: string,
+  ) {
+    const mission = await this.findOne(id, ownerId);
 
     if (mission.status !== MissionStatus.PLANNED) {
       throw new BadRequestException(
@@ -148,32 +128,10 @@ export class MissionsService {
     const isReassigningDrone = droneId !== mission.droneId;
 
     if (isReassigningDrone) {
-      const drone = await this.dronesRepository.findOne({
-        where: { id: droneId },
-      });
-
-      if (!drone) {
-        throw new NotFoundException(`Drone ${droneId} was not found.`);
-      }
-
-      if (drone.status !== DroneStatus.AVAILABLE) {
-        throw new BadRequestException(
-          'Only drones with AVAILABLE status can be assigned to missions.',
-        );
-      }
+      await this.getAvailableDroneOrThrow(droneId, ownerId);
     }
 
-    if (plannedStart.getTime() < Date.now()) {
-      throw new BadRequestException(
-        'Missions cannot be scheduled in the past.',
-      );
-    }
-
-    if (plannedStart.getTime() >= plannedEnd.getTime()) {
-      throw new BadRequestException(
-        'Mission planned end must be after planned start.',
-      );
-    }
+    this.assertValidPlannedWindow(plannedStart, plannedEnd);
 
     await this.assertNoOverlap(droneId, plannedStart, plannedEnd, mission.id);
 
@@ -187,15 +145,13 @@ export class MissionsService {
     return this.missionsRepository.save(mission);
   }
 
-  async transition(id: string, transitionMissionDto: TransitionMissionDto) {
-    const mission = await this.findOne(id);
-    const drone = await this.dronesRepository.findOne({
-      where: { id: mission.droneId },
-    });
-
-    if (!drone) {
-      throw new NotFoundException(`Drone ${mission.droneId} was not found.`);
-    }
+  async transition(
+    id: string,
+    transitionMissionDto: TransitionMissionDto,
+    ownerId: string,
+  ) {
+    const mission = await this.findOne(id, ownerId);
+    const drone = await this.getDroneOrThrow(mission.droneId, ownerId);
 
     assertValidMissionTransition(mission.status, transitionMissionDto.status);
 
@@ -244,13 +200,7 @@ export class MissionsService {
           drone.totalFlightHours + transitionMissionDto.flightHoursLogged
         ).toFixed(1),
       );
-      drone.status = isMaintenanceDue({
-        totalFlightHours: drone.totalFlightHours,
-        flightHoursAtLastMaintenance: drone.flightHoursAtLastMaintenance,
-        nextMaintenanceDueDate: drone.nextMaintenanceDueDate,
-      })
-        ? DroneStatus.MAINTENANCE
-        : DroneStatus.AVAILABLE;
+      drone.status = resolveDroneStatusAfterMissionCompletion(drone);
 
       await this.dronesRepository.save(drone);
       return this.missionsRepository.save(mission);
@@ -258,6 +208,44 @@ export class MissionsService {
 
     mission.status = transitionMissionDto.status;
     return this.missionsRepository.save(mission);
+  }
+
+  private assertValidPlannedWindow(plannedStart: Date, plannedEnd: Date) {
+    if (plannedStart.getTime() < Date.now()) {
+      throw new BadRequestException(
+        'Missions cannot be scheduled in the past.',
+      );
+    }
+
+    if (plannedStart.getTime() >= plannedEnd.getTime()) {
+      throw new BadRequestException(
+        'Mission planned end must be after planned start.',
+      );
+    }
+  }
+
+  private async getDroneOrThrow(droneId: string, ownerId: string) {
+    const drone = await this.dronesRepository.findOne({
+      where: { id: droneId, ownerId },
+    });
+
+    if (!drone) {
+      throw new NotFoundException(`Drone ${droneId} was not found.`);
+    }
+
+    return drone;
+  }
+
+  private async getAvailableDroneOrThrow(droneId: string, ownerId: string) {
+    const drone = await this.getDroneOrThrow(droneId, ownerId);
+
+    if (drone.status !== DroneStatus.AVAILABLE) {
+      throw new BadRequestException(
+        'Only drones with AVAILABLE status can be assigned to missions.',
+      );
+    }
+
+    return drone;
   }
 
   private async assertNoOverlap(

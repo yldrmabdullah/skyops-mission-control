@@ -8,6 +8,8 @@ import {
 import { Mission, MissionStatus, MissionType } from './entities/mission.entity';
 import { MissionsService } from './missions.service';
 
+const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+
 function createMissionRepositoryMock() {
   const queryBuilder = {
     where: jest.fn().mockReturnThis(),
@@ -48,25 +50,30 @@ describe('MissionsService', () => {
   it('rejects mission creation when the drone is not available', async () => {
     dronesRepository.findOne.mockResolvedValue({
       id: 'drone-1',
+      ownerId: OWNER_ID,
       status: DroneStatus.MAINTENANCE,
     } as Drone);
 
     await expect(
-      service.create({
-        name: 'Wind inspection',
-        type: MissionType.WIND_TURBINE_INSPECTION,
-        droneId: 'drone-1',
-        pilotName: 'Jane Doe',
-        siteLocation: 'Berlin, Germany',
-        plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-      }),
+      service.create(
+        {
+          name: 'Wind inspection',
+          type: MissionType.WIND_TURBINE_INSPECTION,
+          droneId: 'drone-1',
+          pilotName: 'Jane Doe',
+          siteLocation: 'Berlin, Germany',
+          plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        },
+        OWNER_ID,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('rejects mission creation when an overlapping mission exists', async () => {
     dronesRepository.findOne.mockResolvedValue({
       id: 'drone-1',
+      ownerId: OWNER_ID,
       status: DroneStatus.AVAILABLE,
     } as Drone);
     missionsRepository.__queryBuilder.getOne.mockResolvedValue({
@@ -74,15 +81,18 @@ describe('MissionsService', () => {
     });
 
     await expect(
-      service.create({
-        name: 'Overlap mission',
-        type: MissionType.WIND_TURBINE_INSPECTION,
-        droneId: 'drone-1',
-        pilotName: 'Jane Doe',
-        siteLocation: 'Berlin, Germany',
-        plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-      }),
+      service.create(
+        {
+          name: 'Overlap mission',
+          type: MissionType.WIND_TURBINE_INSPECTION,
+          droneId: 'drone-1',
+          pilotName: 'Jane Doe',
+          siteLocation: 'Berlin, Germany',
+          plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        },
+        OWNER_ID,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -91,18 +101,24 @@ describe('MissionsService', () => {
       id: 'mission-1',
       droneId: 'drone-1',
       status: MissionStatus.IN_PROGRESS,
+      drone: { ownerId: OWNER_ID },
     } as Mission;
 
     missionsRepository.findOne.mockResolvedValue(mission);
     dronesRepository.findOne.mockResolvedValue({
       id: 'drone-1',
+      ownerId: OWNER_ID,
       status: DroneStatus.IN_MISSION,
     } as Drone);
 
     await expect(
-      service.transition('mission-1', {
-        status: MissionStatus.ABORTED,
-      }),
+      service.transition(
+        'mission-1',
+        {
+          status: MissionStatus.ABORTED,
+        },
+        OWNER_ID,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -110,9 +126,13 @@ describe('MissionsService', () => {
     missionsRepository.findOne.mockResolvedValue(null);
 
     await expect(
-      service.transition('missing', {
-        status: MissionStatus.PRE_FLIGHT_CHECK,
-      }),
+      service.transition(
+        'missing',
+        {
+          status: MissionStatus.PRE_FLIGHT_CHECK,
+        },
+        OWNER_ID,
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -123,17 +143,23 @@ describe('MissionsService', () => {
       status: MissionStatus.PLANNED,
       plannedStart: new Date(Date.now() + 60 * 60 * 1000),
       plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      drone: { ownerId: OWNER_ID },
     } as Mission);
     dronesRepository.findOne.mockResolvedValue({
       id: 'drone-2',
+      ownerId: OWNER_ID,
       status: DroneStatus.MAINTENANCE,
     } as Drone);
     missionsRepository.__queryBuilder.getOne.mockResolvedValue(null);
 
     await expect(
-      service.update('mission-1', {
-        droneId: 'drone-2',
-      }),
+      service.update(
+        'mission-1',
+        {
+          droneId: 'drone-2',
+        },
+        OWNER_ID,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -144,13 +170,18 @@ describe('MissionsService', () => {
       status: MissionStatus.PLANNED,
       plannedStart: new Date(Date.now() + 60 * 60 * 1000),
       plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      drone: { ownerId: OWNER_ID },
     } as Mission);
     dronesRepository.findOne.mockResolvedValue(null);
 
     await expect(
-      service.update('mission-1', {
-        droneId: 'missing-drone',
-      }),
+      service.update(
+        'mission-1',
+        {
+          droneId: 'missing-drone',
+        },
+        OWNER_ID,
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -159,9 +190,11 @@ describe('MissionsService', () => {
       id: 'mission-1',
       droneId: 'drone-1',
       status: MissionStatus.IN_PROGRESS,
+      drone: { ownerId: OWNER_ID },
     } as Mission;
     const drone = {
       id: 'drone-1',
+      ownerId: OWNER_ID,
       model: DroneModel.MATRICE_300,
       status: DroneStatus.IN_MISSION,
       totalFlightHours: 49,
@@ -172,10 +205,14 @@ describe('MissionsService', () => {
     missionsRepository.findOne.mockResolvedValue(mission);
     dronesRepository.findOne.mockResolvedValue(drone);
 
-    const updatedMission = await service.transition('mission-1', {
-      status: MissionStatus.COMPLETED,
-      flightHoursLogged: 2,
-    });
+    const updatedMission = await service.transition(
+      'mission-1',
+      {
+        status: MissionStatus.COMPLETED,
+        flightHoursLogged: 2,
+      },
+      OWNER_ID,
+    );
 
     expect(updatedMission.status).toBe(MissionStatus.COMPLETED);
     expect(drone.totalFlightHours).toBe(51);

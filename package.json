@@ -14,7 +14,7 @@
     "test:e2e": "pnpm --filter @skyops/web test:e2e",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "prepare": "husky"
+    "prepare": "command -v husky >/dev/null 2>&1 && husky || true"
   },
   "devDependencies": {
     "husky": "^9.1.7",

@@ -33,7 +33,12 @@ describe('ReportsService', () => {
       missionsRepository as unknown as Repository<Mission>,
     );
 
-    const report = await service.getFleetHealthReport();
+    const report = await service.getFleetHealthReport('owner-1');
+
+    expect(dronesRepository.find).toHaveBeenCalledWith({
+      where: { ownerId: 'owner-1' },
+      order: { registeredAt: 'DESC' },
+    });
 
     expect(report.totalDroneCount).toBe(2);
     expect(report.statusBreakdown).toEqual({

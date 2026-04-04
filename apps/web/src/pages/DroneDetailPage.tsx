@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  DroneDangerZone,
-  DroneProfileForm,
-  MaintenanceLogForm,
-} from '../features/drones/DroneForms';
+import { StatePanel } from '../components/StatePanel';
+import { SurfaceCard } from '../components/SurfaceCard';
+import { useNotifications } from '../components/use-notifications';
+import { DroneDangerZone } from '../features/drones/DroneDangerZone';
+import { DroneProfileForm } from '../features/drones/DroneProfileForm';
+import { MaintenanceLogForm } from '../features/drones/MaintenanceLogForm';
 import {
   DroneSummaryPanel,
   MaintenanceHistoryPanel,
@@ -21,6 +22,7 @@ import {
 import { StatusPill } from '../components/StatusPill';
 
 export function DroneDetailPage() {
+  const { notify } = useNotifications();
   const { droneId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -38,11 +40,13 @@ export function DroneDetailPage() {
   } | null>(null);
   const [isDeleteArmed, setIsDeleteArmed] = useState(false);
 
-  const { data: drone, isLoading } = useQuery({
+  const droneQuery = useQuery({
     queryKey: ['drone', droneId],
     queryFn: () => fetchDrone(droneId),
     enabled: Boolean(droneId),
   });
+  const drone = droneQuery.data;
+  const isLoading = droneQuery.isLoading;
 
   async function refreshDroneData() {
     await Promise.all([
@@ -59,6 +63,11 @@ export function DroneDetailPage() {
       setProfileFeedback({
         tone: 'success',
         message: 'Drone profile updated successfully.',
+      });
+      notify({
+        tone: 'success',
+        title: 'Drone updated',
+        description: 'The drone profile is now up to date.',
       });
       await refreshDroneData();
     },
@@ -77,6 +86,11 @@ export function DroneDetailPage() {
         tone: 'success',
         message: 'Maintenance log added successfully.',
       });
+      notify({
+        tone: 'success',
+        title: 'Maintenance recorded',
+        description: 'The maintenance history and due dates were refreshed.',
+      });
       await refreshDroneData();
     },
     onError: (error) => {
@@ -94,6 +108,11 @@ export function DroneDetailPage() {
         queryClient.invalidateQueries({ queryKey: ['drones'] }),
         queryClient.invalidateQueries({ queryKey: ['fleet-health'] }),
       ]);
+      notify({
+        tone: 'success',
+        title: 'Drone deleted',
+        description: 'The drone has been removed from the registry.',
+      });
       void navigate('/drones');
     },
     onError: (error) => {
@@ -105,8 +124,44 @@ export function DroneDetailPage() {
     },
   });
 
-  if (isLoading || !drone) {
-    return <div className="empty-state">Loading drone detail...</div>;
+  if (isLoading) {
+    return (
+      <StatePanel
+        description="The drone profile, mission history, and maintenance logs are loading."
+        title="Loading drone detail"
+      />
+    );
+  }
+
+  if (droneQuery.isError) {
+    const message = getErrorMessage(droneQuery.error);
+    const isNotFound = message.toLowerCase().includes('was not found');
+
+    return (
+      <StatePanel
+        actionHref="/drones"
+        actionLabel="Return to registry"
+        description={
+          isNotFound
+            ? 'The selected drone could not be found. It may have been deleted or the URL may be incorrect.'
+            : message
+        }
+        title={isNotFound ? 'Drone not found' : 'Unable to load drone detail'}
+        tone={isNotFound ? 'warning' : 'error'}
+      />
+    );
+  }
+
+  if (!drone) {
+    return (
+      <StatePanel
+        actionHref="/drones"
+        actionLabel="Return to registry"
+        description="No drone data is available for this route."
+        title="Drone unavailable"
+        tone="warning"
+      />
+    );
   }
 
   const canDelete = !drone.missions?.length && !drone.maintenanceLogs?.length;
@@ -131,14 +186,14 @@ export function DroneDetailPage() {
       </header>
 
       <section className="panel-grid split">
-        <article className="card">
-          <div className="card-header">
-            <h3>Edit profile</h3>
+        <SurfaceCard
+          actions={
             <span className="muted">
               Keep serial, status, and maintenance data aligned
             </span>
-          </div>
-
+          }
+          title="Edit profile"
+        >
           <DroneProfileForm
             key={`${drone.id}-${drone.status}-${drone.totalFlightHours}-${drone.lastMaintenanceDate}`}
             drone={drone}
@@ -149,16 +204,16 @@ export function DroneDetailPage() {
               updateDroneMutation.mutate(payload);
             }}
           />
-        </article>
+        </SurfaceCard>
 
-        <article className="card">
-          <div className="card-header">
-            <h3>Add maintenance log</h3>
+        <SurfaceCard
+          actions={
             <span className="muted">
               Routine checks and repairs update due dates automatically
             </span>
-          </div>
-
+          }
+          title="Add maintenance log"
+        >
           <MaintenanceLogForm
             key={`${drone.id}-${drone.totalFlightHours}-${drone.maintenanceLogs?.length ?? 0}`}
             droneId={droneId}
@@ -170,19 +225,19 @@ export function DroneDetailPage() {
               createMaintenanceLogMutation.mutate(payload);
             }}
           />
-        </article>
+        </SurfaceCard>
       </section>
 
-      <section className="panel-grid split" style={{ marginTop: '1rem' }}>
+      <section className="panel-grid split section-spaced">
         <DroneSummaryPanel drone={drone} />
         <MaintenanceHistoryPanel drone={drone} />
       </section>
 
-      <section style={{ marginTop: '1rem' }}>
+      <section className="section-spaced">
         <MissionHistoryPanel drone={drone} />
       </section>
 
-      <section style={{ marginTop: '1rem' }}>
+      <section className="section-spaced">
         <DroneDangerZone
           canDelete={canDelete}
           feedback={deleteFeedback}

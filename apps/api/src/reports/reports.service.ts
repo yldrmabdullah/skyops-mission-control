@@ -14,8 +14,9 @@ export class ReportsService {
     private readonly missionsRepository: Repository<Mission>,
   ) {}
 
-  async getFleetHealthReport() {
+  async getFleetHealthReport(ownerId: string) {
     const drones = await this.dronesRepository.find({
+      where: { ownerId },
       order: { registeredAt: 'DESC' },
     });
 
@@ -40,12 +41,20 @@ export class ReportsService {
     const next24Hours = new Date(now);
     next24Hours.setUTCDate(next24Hours.getUTCDate() + 1);
 
-    const upcomingMissions = await this.missionsRepository.count({
-      where: {
-        status: In([MissionStatus.PLANNED, MissionStatus.PRE_FLIGHT_CHECK]),
-        plannedStart: Between(now, next24Hours),
-      },
-    });
+    const droneIds = drones.map((d) => d.id);
+    const upcomingMissions =
+      droneIds.length === 0
+        ? 0
+        : await this.missionsRepository.count({
+            where: {
+              droneId: In(droneIds),
+              status: In([
+                MissionStatus.PLANNED,
+                MissionStatus.PRE_FLIGHT_CHECK,
+              ]),
+              plannedStart: Between(now, next24Hours),
+            },
+          });
 
     const averageFlightHoursPerDrone =
       totalCount === 0

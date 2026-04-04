@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
+import { useId } from 'react';
 import { format } from 'date-fns';
+import { DateInput } from '../../components/DateInput';
+import { EmptyState, SurfaceCard } from '../../components/SurfaceCard';
 import { StatusPill } from '../../components/StatusPill';
 import { formatEnumLabel } from '../../lib/format';
 import type { Drone, Mission, MissionStatus } from '../../types/api';
@@ -29,48 +32,63 @@ export function MissionFilters({
   status,
   droneId,
 }: MissionFiltersProps) {
+  const statusSelectId = useId();
+  const droneSelectId = useId();
+
   return (
-    <div className="toolbar">
-      <select
-        className="select"
-        value={status}
-        onChange={(event) =>
-          onChange({ status: event.target.value as '' | MissionStatus })
-        }
-      >
-        <option value="">All statuses</option>
-        {missionStatuses.map((option) => (
-          <option key={option} value={option}>
-            {formatEnumLabel(option)}
-          </option>
-        ))}
-      </select>
+    <div className="mission-filters">
+      <div className="field mission-filter-field">
+        <label className="field-label" htmlFor={statusSelectId}>
+          Status
+        </label>
+        <select
+          id={statusSelectId}
+          className="select"
+          value={status}
+          onChange={(event) =>
+            onChange({ status: event.target.value as '' | MissionStatus })
+          }
+        >
+          <option value="">All statuses</option>
+          {missionStatuses.map((option) => (
+            <option key={option} value={option}>
+              {formatEnumLabel(option)}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <select
-        className="select"
-        value={droneId}
-        onChange={(event) => onChange({ droneId: event.target.value })}
-      >
-        <option value="">All drones</option>
-        {drones.map((drone) => (
-          <option key={drone.id} value={drone.id}>
-            {drone.serialNumber}
-          </option>
-        ))}
-      </select>
+      <div className="field mission-filter-field">
+        <label className="field-label" htmlFor={droneSelectId}>
+          Drone
+        </label>
+        <select
+          id={droneSelectId}
+          className="select"
+          value={droneId}
+          onChange={(event) => onChange({ droneId: event.target.value })}
+        >
+          <option value="">All drones</option>
+          {drones.map((drone) => (
+            <option key={drone.id} value={drone.id}>
+              {drone.serialNumber}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <input
-        className="input"
-        type="date"
+      <DateInput
+        compact
+        label="Start date"
         value={startDate}
-        onChange={(event) => onChange({ startDate: event.target.value })}
+        onChange={(value) => onChange({ startDate: value })}
       />
 
-      <input
-        className="input"
-        type="date"
+      <DateInput
+        compact
+        label="End date"
         value={endDate}
-        onChange={(event) => onChange({ endDate: event.target.value })}
+        onChange={(value) => onChange({ endDate: value })}
       />
     </div>
   );
@@ -87,34 +105,22 @@ export function SelectedMissionPanel({
 }: SelectedMissionPanelProps) {
   if (!mission) {
     return (
-      <article className="card">
-        <div className="card-header">
-          <div>
-            <h3>Selected mission</h3>
-            <p className="card-subtitle">
-              Planned missions can be edited here before operational work
-              begins.
-            </p>
-          </div>
-        </div>
-        <div className="empty-state">
+      <SurfaceCard
+        description="Planned missions can be edited here before operational work begins."
+        title="Selected mission"
+      >
+        <EmptyState>
           Select a mission from the table below to manage it.
-        </div>
-      </article>
+        </EmptyState>
+      </SurfaceCard>
     );
   }
 
   return (
-    <article className="card">
-      <div className="card-header">
-        <div>
-          <h3>Selected mission</h3>
-          <p className="card-subtitle">
-            Planned missions can be edited here before operational work begins.
-          </p>
-        </div>
-      </div>
-
+    <SurfaceCard
+      description="Planned missions can be edited here before operational work begins."
+      title="Selected mission"
+    >
       <div className="list-row">
         <div>
           <div className="list-row-title">{mission.name}</div>
@@ -151,7 +157,7 @@ export function SelectedMissionPanel({
 
       <hr className="card-divider" />
       {children}
-    </article>
+    </SurfaceCard>
   );
 }
 
@@ -169,54 +175,53 @@ export function MissionTimelineTable({
   selectedMissionId,
 }: MissionTimelineTableProps) {
   return (
-    <article className="card" style={{ marginTop: '1rem' }}>
-      <div className="card-header">
-        <div>
-          <h3>Mission timeline</h3>
-          <p className="card-subtitle">
-            Click a row to load edit and transition controls.
-          </p>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="empty-state">Loading missions...</div>
-      ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Pilot</th>
-              <th>Site</th>
-              <th>Planned start</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {missions.map((mission) => (
-              <tr
-                key={mission.id}
-                className={
-                  selectedMissionId === mission.id ? 'table-row-selected' : ''
-                }
-                onClick={() => onSelect(mission.id)}
-              >
-                <td>{mission.name}</td>
-                <td>{formatEnumLabel(mission.type)}</td>
-                <td>{mission.pilotName}</td>
-                <td>{mission.siteLocation}</td>
-                <td>
-                  {format(new Date(mission.plannedStart), 'dd MMM yyyy HH:mm')}
-                </td>
-                <td>
-                  <StatusPill value={mission.status} />
-                </td>
+    <div className="section-spaced">
+      <SurfaceCard
+        description="Click a row to load edit and transition controls."
+        title="Mission timeline"
+      >
+        {isLoading ? (
+          <EmptyState>Loading missions...</EmptyState>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Pilot</th>
+                <th>Site</th>
+                <th>Planned start</th>
+                <th>Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </article>
+            </thead>
+            <tbody>
+              {missions.map((mission) => (
+                <tr
+                  key={mission.id}
+                  className={
+                    selectedMissionId === mission.id ? 'table-row-selected' : ''
+                  }
+                  onClick={() => onSelect(mission.id)}
+                >
+                  <td>{mission.name}</td>
+                  <td>{formatEnumLabel(mission.type)}</td>
+                  <td>{mission.pilotName}</td>
+                  <td>{mission.siteLocation}</td>
+                  <td>
+                    {format(
+                      new Date(mission.plannedStart),
+                      'dd MMM yyyy HH:mm',
+                    )}
+                  </td>
+                  <td>
+                    <StatusPill value={mission.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </SurfaceCard>
+    </div>
   );
 }

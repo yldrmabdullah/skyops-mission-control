@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { StatePanel } from '../components/StatePanel';
+import { EmptyState, SurfaceCard } from '../components/SurfaceCard';
+import { useNotifications } from '../components/use-notifications';
 import { MissionComposerForm } from '../features/missions/MissionComposerForm';
 import {
   MissionFilters,
@@ -30,6 +33,7 @@ interface MissionFiltersState {
 }
 
 export function MissionsPage() {
+  const { notify } = useNotifications();
   const [filters, setFilters] = useState<MissionFiltersState>({
     status: '',
     droneId: '',
@@ -37,6 +41,7 @@ export function MissionsPage() {
     endDate: '',
   });
   const [selectedMissionId, setSelectedMissionId] = useState('');
+  const [createSuccessCount, setCreateSuccessCount] = useState(0);
   const [createFeedback, setCreateFeedback] = useState<{
     tone: 'success' | 'error';
     message: string;
@@ -52,12 +57,12 @@ export function MissionsPage() {
 
   const queryClient = useQueryClient();
 
-  const { data: dronesResponse } = useQuery({
+  const dronesQuery = useQuery({
     queryKey: ['drones', 'missions-page'],
     queryFn: () => fetchDrones(),
   });
 
-  const { data: missionsResponse, isLoading } = useQuery({
+  const missionsQuery = useQuery({
     queryKey: [
       'missions',
       filters.status,
@@ -77,12 +82,12 @@ export function MissionsPage() {
           : undefined,
       }),
   });
+  const dronesResponse = dronesQuery.data;
+  const missionsResponse = missionsQuery.data;
+  const isLoading = missionsQuery.isLoading;
 
   const drones = dronesResponse?.data ?? [];
   const missions = missionsResponse?.data ?? [];
-  const availableDrones = drones.filter(
-    (drone) => drone.status === 'AVAILABLE',
-  );
   const activeMissionId = missions.some(
     (mission) => mission.id === selectedMissionId,
   )
@@ -111,6 +116,12 @@ export function MissionsPage() {
         tone: 'success',
         message: 'Mission scheduled successfully.',
       });
+      setCreateSuccessCount((current) => current + 1);
+      notify({
+        tone: 'success',
+        title: 'Mission scheduled',
+        description: 'The mission has been added to the active board.',
+      });
       setSelectedMissionId(mission.id);
       await refreshMissionData();
     },
@@ -134,6 +145,11 @@ export function MissionsPage() {
       setEditFeedback({
         tone: 'success',
         message: 'Mission plan updated successfully.',
+      });
+      notify({
+        tone: 'success',
+        title: 'Mission updated',
+        description: 'The mission plan has been saved successfully.',
       });
       setSelectedMissionId(mission.id);
       await refreshMissionData();
@@ -159,6 +175,11 @@ export function MissionsPage() {
         tone: 'success',
         message: 'Mission status updated successfully.',
       });
+      notify({
+        tone: 'success',
+        title: 'Mission transitioned',
+        description: 'The lifecycle state was updated successfully.',
+      });
       await refreshMissionData();
     },
     onError: (error) => {
@@ -168,6 +189,18 @@ export function MissionsPage() {
       });
     },
   });
+
+  if (dronesQuery.isError || missionsQuery.isError) {
+    return (
+      <StatePanel
+        actionHref="/dashboard"
+        actionLabel="Return to dashboard"
+        description={getErrorMessage(dronesQuery.error ?? missionsQuery.error)}
+        title="Unable to load mission control"
+        tone="error"
+      />
+    );
+  }
 
   return (
     <>
@@ -203,19 +236,13 @@ export function MissionsPage() {
       />
 
       <section className="panel-grid split">
-        <article className="card">
-          <div className="card-header">
-            <div>
-              <h3>Schedule mission</h3>
-              <p className="card-subtitle">
-                Only currently available drones can be assigned at planning
-                time.
-              </p>
-            </div>
-          </div>
-
+        <SurfaceCard
+          description="Only currently available drones can be assigned at planning time."
+          title="Schedule mission"
+        >
           <MissionComposerForm
-            availableDrones={availableDrones}
+            key={createSuccessCount}
+            drones={drones}
             feedback={createFeedback}
             isPending={createMissionMutation.isPending}
             onSubmit={(payload) => {
@@ -223,7 +250,7 @@ export function MissionsPage() {
               createMissionMutation.mutate(payload);
             }}
           />
-        </article>
+        </SurfaceCard>
 
         <SelectedMissionPanel mission={selectedMission}>
           {selectedMission?.status === 'PLANNED' ? (
@@ -246,9 +273,9 @@ export function MissionsPage() {
             </>
           ) : (
             <>
-              <div className="empty-state">
+              <EmptyState>
                 Direct editing is locked after pre-flight activity begins.
-              </div>
+              </EmptyState>
               <hr className="card-divider" />
             </>
           )}

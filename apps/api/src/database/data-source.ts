@@ -1,5 +1,6 @@
 import { config as loadEnvironment } from 'dotenv';
 import { DataSource } from 'typeorm';
+import { User } from '../auth/entities/user.entity';
 import { Drone } from '../drones/entities/drone.entity';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
 import { Mission } from '../missions/entities/mission.entity';
@@ -15,6 +16,6 @@ export default new DataSource({
   username: process.env.DATABASE_USERNAME,
   password: process.env.DATABASE_PASSWORD,
   database: process.env.DATABASE_NAME,
-  entities: [Drone, Mission, MaintenanceLog],
+  entities: [User, Drone, Mission, MaintenanceLog],
   migrations: ['src/database/migrations/*.{ts,js}'],
 });

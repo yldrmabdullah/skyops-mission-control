@@ -27,6 +27,8 @@ export type MaintenanceType =
 
 export interface Drone {
   id: string;
+  /** Present when API returns scoped fleet data (JWT owner). */
+  ownerId?: string;
   serialNumber: string;
   model: DroneModel;
   status: DroneStatus;
@@ -147,4 +149,20 @@ export interface CreateMaintenanceLogPayload {
   notes?: string;
   performedAt: string;
   flightHoursAtMaintenance: number;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  fullName: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  tokenType: 'Bearer';
+  user: AuthUser;
+}
+
+export interface AuthProfile extends AuthUser {
+  createdAt: string;
 }

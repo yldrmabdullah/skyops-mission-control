@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { DateInput } from '../../components/DateInput';
+import { DecimalTextInput } from '../../components/DecimalTextInput';
 import { FormNotice } from '../../components/FormNotice';
+import { parseLocaleDecimalOrZero } from '../../lib/locale-number';
+import { getSerialFormatHint } from '../../lib/serial-format-hint';
 import type { CreateDronePayload } from '../../types/api';
 import {
   droneModels,
@@ -33,6 +37,9 @@ export function DroneRegistryForm({
   onSubmit,
 }: DroneRegistryFormProps) {
   const [formState, setFormState] = useState(initialDroneForm);
+  const [clientError, setClientError] = useState<string | null>(null);
+  const serialHintId = useId();
+  const serialHint = getSerialFormatHint(formState.serialNumber);
 
   return (
     <form
@@ -40,18 +47,36 @@ export function DroneRegistryForm({
       data-testid="create-drone-form"
       onSubmit={(event) => {
         event.preventDefault();
+        setClientError(null);
+
+        const totalFlightHours = parseLocaleDecimalOrZero(
+          formState.totalFlightHours,
+        );
+        const flightHoursAtLastMaintenance = parseLocaleDecimalOrZero(
+          formState.flightHoursAtLastMaintenance,
+        );
+
+        if (
+          !Number.isFinite(totalFlightHours) ||
+          totalFlightHours < 0 ||
+          !Number.isFinite(flightHoursAtLastMaintenance) ||
+          flightHoursAtLastMaintenance < 0
+        ) {
+          setClientError(
+            'Enter valid flight hour values. Use a period or comma as the decimal separator.',
+          );
+          return;
+        }
 
         onSubmit({
           serialNumber: formState.serialNumber.trim().toUpperCase(),
           model: formState.model,
           status: formState.status,
-          totalFlightHours: Number(formState.totalFlightHours || 0),
+          totalFlightHours,
           lastMaintenanceDate: new Date(
             `${formState.lastMaintenanceDate}T00:00:00`,
           ).toISOString(),
-          flightHoursAtLastMaintenance: Number(
-            formState.flightHoursAtLastMaintenance || 0,
-          ),
+          flightHoursAtLastMaintenance,
         });
       }}
     >
@@ -59,17 +84,26 @@ export function DroneRegistryForm({
         <span className="field-label">Serial number</span>
         <input
           required
+          aria-describedby={serialHintId}
           className="input"
           data-testid="drone-serial-input"
           placeholder="SKY-A1B2-C3D4"
           value={formState.serialNumber}
-          onChange={(event) =>
+          onChange={(event) => {
+            setClientError(null);
             setFormState((currentState) => ({
               ...currentState,
               serialNumber: event.target.value,
-            }))
-          }
+            }));
+          }}
         />
+        <p
+          className={`field-hint ${serialHint.valid ? 'serial-hint--valid' : ''}`}
+          id={serialHintId}
+          role="status"
+        >
+          {serialHint.text}
+        </p>
       </label>
 
       <div className="form-row">
@@ -117,55 +151,52 @@ export function DroneRegistryForm({
       <div className="form-row">
         <label className="field">
           <span className="field-label">Total flight hours</span>
-          <input
+          <DecimalTextInput
             className="input"
-            min="0"
-            step="0.1"
-            type="number"
             value={formState.totalFlightHours}
-            onChange={(event) =>
+            onChange={(value) => {
+              setClientError(null);
               setFormState((currentState) => ({
                 ...currentState,
-                totalFlightHours: event.target.value,
-              }))
-            }
+                totalFlightHours: value,
+              }));
+            }}
           />
         </label>
 
         <label className="field">
           <span className="field-label">Hours at last maintenance</span>
-          <input
+          <DecimalTextInput
             className="input"
-            min="0"
-            step="0.1"
-            type="number"
             value={formState.flightHoursAtLastMaintenance}
-            onChange={(event) =>
+            onChange={(value) => {
+              setClientError(null);
               setFormState((currentState) => ({
                 ...currentState,
-                flightHoursAtLastMaintenance: event.target.value,
-              }))
-            }
+                flightHoursAtLastMaintenance: value,
+              }));
+            }}
           />
         </label>
       </div>
 
-      <label className="field">
-        <span className="field-label">Last maintenance date</span>
-        <input
-          required
-          className="input"
-          type="date"
-          value={formState.lastMaintenanceDate}
-          onChange={(event) =>
-            setFormState((currentState) => ({
-              ...currentState,
-              lastMaintenanceDate: event.target.value,
-            }))
-          }
-        />
-      </label>
+      <p className="field-hint">
+        Decimal separator: period (1.5) or comma (1,5) — both are accepted.
+      </p>
 
+      <DateInput
+        label="Last maintenance date"
+        required
+        value={formState.lastMaintenanceDate}
+        onChange={(value) =>
+          setFormState((currentState) => ({
+            ...currentState,
+            lastMaintenanceDate: value,
+          }))
+        }
+      />
+
+      {clientError ? <FormNotice tone="error" message={clientError} /> : null}
       {feedback ? (
         <FormNotice tone={feedback.tone} message={feedback.message} />
       ) : null}

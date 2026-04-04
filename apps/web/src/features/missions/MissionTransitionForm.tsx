@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { DateInput } from '../../components/DateInput';
+import { DecimalTextInput } from '../../components/DecimalTextInput';
 import { FormNotice } from '../../components/FormNotice';
+import { parseLocaleDecimal } from '../../lib/locale-number';
 import { formatEnumLabel } from '../../lib/format';
 import type { Mission } from '../../types/api';
 import {
@@ -30,6 +33,7 @@ export function MissionTransitionForm({
   const [formState, setFormState] = useState(() =>
     createTransitionForm(mission.status),
   );
+  const [clientError, setClientError] = useState<string | null>(null);
   const availableTransitions = getAllowedTransitions(mission.status);
   const activeTransitionStatus = availableTransitions.includes(formState.status)
     ? formState.status
@@ -41,6 +45,18 @@ export function MissionTransitionForm({
       data-testid="mission-transition-form"
       onSubmit={(event) => {
         event.preventDefault();
+        setClientError(null);
+
+        if (activeTransitionStatus === 'COMPLETED') {
+          const hours = parseLocaleDecimal(formState.flightHoursLogged);
+          if (!Number.isFinite(hours) || hours < 0.1) {
+            setClientError(
+              'Enter flight hours logged (minimum 0.1). Use a period or comma as the decimal separator.',
+            );
+            return;
+          }
+        }
+
         onSubmit(transitionFormToPayload(formState, activeTransitionStatus));
       }}
     >
@@ -65,12 +81,13 @@ export function MissionTransitionForm({
               className="select"
               data-testid="mission-transition-select"
               value={activeTransitionStatus}
-              onChange={(event) =>
+              onChange={(event) => {
+                setClientError(null);
                 setFormState((currentState) => ({
                   ...currentState,
                   status: event.target.value as TransitionFormState['status'],
-                }))
-              }
+                }));
+              }}
             >
               {availableTransitions.map((status) => (
                 <option key={status} value={status}>
@@ -81,75 +98,70 @@ export function MissionTransitionForm({
           </label>
 
           {activeTransitionStatus === 'IN_PROGRESS' ? (
-            <label className="field">
-              <span className="field-label">Actual start</span>
-              <input
-                className="input"
-                type="datetime-local"
-                value={formState.actualStart}
-                onChange={(event) =>
-                  setFormState((currentState) => ({
-                    ...currentState,
-                    actualStart: event.target.value,
-                  }))
-                }
-              />
-            </label>
+            <DateInput
+              label="Actual start"
+              type="datetime-local"
+              value={formState.actualStart}
+              onChange={(value) =>
+                setFormState((currentState) => ({
+                  ...currentState,
+                  actualStart: value,
+                }))
+              }
+            />
           ) : null}
 
           {activeTransitionStatus === 'COMPLETED' ? (
-            <div className="form-row">
-              <label className="field">
-                <span className="field-label">Actual end</span>
-                <input
-                  className="input"
+            <div className="form-field-group">
+              <div className="form-row">
+                <DateInput
+                  compact
+                  label="Actual end"
                   type="datetime-local"
                   value={formState.actualEnd}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormState((currentState) => ({
                       ...currentState,
-                      actualEnd: event.target.value,
+                      actualEnd: value,
                     }))
                   }
                 />
-              </label>
 
-              <label className="field">
-                <span className="field-label">Flight hours logged</span>
-                <input
-                  required
-                  className="input"
-                  min="0.1"
-                  step="0.1"
-                  type="number"
-                  value={formState.flightHoursLogged}
-                  onChange={(event) =>
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      flightHoursLogged: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+                <label className="field">
+                  <span className="field-label">Flight hours logged</span>
+                  <DecimalTextInput
+                    required
+                    className="input"
+                    value={formState.flightHoursLogged}
+                    onChange={(value) => {
+                      setClientError(null);
+                      setFormState((currentState) => ({
+                        ...currentState,
+                        flightHoursLogged: value,
+                      }));
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="field-hint form-hint-below-pair">
+                Decimal: 1.5 or 1,5 — both accepted.
+              </p>
             </div>
           ) : null}
 
           {activeTransitionStatus === 'ABORTED' ? (
             <>
-              <label className="field">
-                <span className="field-label">Actual end</span>
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={formState.actualEnd}
-                  onChange={(event) =>
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      actualEnd: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+              <DateInput
+                label="Actual end"
+                type="datetime-local"
+                value={formState.actualEnd}
+                onChange={(value) =>
+                  setFormState((currentState) => ({
+                    ...currentState,
+                    actualEnd: value,
+                  }))
+                }
+              />
 
               <label className="field">
                 <span className="field-label">Abort reason</span>
@@ -171,6 +183,7 @@ export function MissionTransitionForm({
         </>
       )}
 
+      {clientError ? <FormNotice tone="error" message={clientError} /> : null}
       {feedback ? (
         <FormNotice tone={feedback.tone} message={feedback.message} />
       ) : null}

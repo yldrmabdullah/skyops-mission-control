@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DateInput } from '../../components/DateInput';
 import { FormNotice } from '../../components/FormNotice';
 import { formatEnumLabel } from '../../lib/format';
 import type { CreateMissionPayload, Drone } from '../../types/api';
@@ -14,19 +15,22 @@ interface Feedback {
 }
 
 interface MissionComposerFormProps {
-  availableDrones: Drone[];
+  drones: Drone[];
   feedback: Feedback | null;
   isPending: boolean;
   onSubmit: (payload: CreateMissionPayload) => void;
 }
 
 export function MissionComposerForm({
-  availableDrones,
+  drones,
   feedback,
   isPending,
   onSubmit,
 }: MissionComposerFormProps) {
   const [formState, setFormState] = useState(createMissionFormState);
+  const availableDroneCount = drones.filter(
+    (drone) => drone.status === 'AVAILABLE',
+  ).length;
 
   return (
     <form
@@ -53,49 +57,59 @@ export function MissionComposerForm({
         />
       </label>
 
-      <div className="form-row">
-        <label className="field">
-          <span className="field-label">Mission type</span>
-          <select
-            className="select"
-            value={formState.type}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                type: event.target.value as CreateMissionPayload['type'],
-              }))
-            }
-          >
-            {missionTypes.map((type) => (
-              <option key={type} value={type}>
-                {formatEnumLabel(type)}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="form-field-group">
+        <div className="form-row">
+          <label className="field">
+            <span className="field-label">Mission type</span>
+            <select
+              className="select"
+              value={formState.type}
+              onChange={(event) =>
+                setFormState((currentState) => ({
+                  ...currentState,
+                  type: event.target.value as CreateMissionPayload['type'],
+                }))
+              }
+            >
+              {missionTypes.map((type) => (
+                <option key={type} value={type}>
+                  {formatEnumLabel(type)}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="field">
-          <span className="field-label">Assigned drone</span>
-          <select
-            required
-            className="select"
-            data-testid="mission-drone-select"
-            value={formState.droneId}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                droneId: event.target.value,
-              }))
-            }
-          >
-            <option value="">Select a drone</option>
-            {availableDrones.map((drone) => (
-              <option key={drone.id} value={drone.id}>
-                {drone.serialNumber}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="field">
+            <span className="field-label">Assigned drone</span>
+            <select
+              required
+              className="select"
+              data-testid="mission-drone-select"
+              value={formState.droneId}
+              onChange={(event) =>
+                setFormState((currentState) => ({
+                  ...currentState,
+                  droneId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Select a drone</option>
+              {drones.map((drone) => (
+                <option
+                  key={drone.id}
+                  disabled={drone.status !== 'AVAILABLE'}
+                  value={drone.id}
+                >
+                  {drone.serialNumber} · {formatEnumLabel(drone.status)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="field-hint form-hint-below-pair">
+          Only drones with `AVAILABLE` status can be selected for new missions.
+          Available now: {availableDroneCount}
+        </p>
       </div>
 
       <div className="form-row">
@@ -131,37 +145,33 @@ export function MissionComposerForm({
       </div>
 
       <div className="form-row">
-        <label className="field">
-          <span className="field-label">Planned start</span>
-          <input
-            required
-            className="input"
-            type="datetime-local"
-            value={formState.plannedStart}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                plannedStart: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <DateInput
+          compact
+          label="Planned start"
+          required
+          type="datetime-local"
+          value={formState.plannedStart}
+          onChange={(value) =>
+            setFormState((currentState) => ({
+              ...currentState,
+              plannedStart: value,
+            }))
+          }
+        />
 
-        <label className="field">
-          <span className="field-label">Planned end</span>
-          <input
-            required
-            className="input"
-            type="datetime-local"
-            value={formState.plannedEnd}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                plannedEnd: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <DateInput
+          compact
+          label="Planned end"
+          required
+          type="datetime-local"
+          value={formState.plannedEnd}
+          onChange={(value) =>
+            setFormState((currentState) => ({
+              ...currentState,
+              plannedEnd: value,
+            }))
+          }
+        />
       </div>
 
       {feedback ? (

@@ -1,3 +1,4 @@
+import { parseLocaleDecimal } from '../../lib/locale-number';
 import type {
   CreateMissionPayload,
   Mission,
@@ -137,9 +138,13 @@ export function transitionFormToPayload(
     actualEnd: formState.actualEnd
       ? new Date(formState.actualEnd).toISOString()
       : undefined,
-    flightHoursLogged: formState.flightHoursLogged
-      ? Number(formState.flightHoursLogged)
-      : undefined,
+    flightHoursLogged: (() => {
+      if (!formState.flightHoursLogged?.trim()) {
+        return undefined;
+      }
+      const n = parseLocaleDecimal(formState.flightHoursLogged);
+      return Number.isFinite(n) ? n : undefined;
+    })(),
     abortReason: formState.abortReason || undefined,
   };
 }
