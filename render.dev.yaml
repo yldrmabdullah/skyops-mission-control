@@ -13,8 +13,8 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @skyops/api build
-    startCommand: pnpm --filter @skyops/api migration:run && pnpm --filter @skyops/api start:prod
+    buildCommand: corepack enable && export NODE_OPTIONS=--max-old-space-size=460 && pnpm install --frozen-lockfile --filter @skyops/api... && pnpm --filter @skyops/api build
+    startCommand: pnpm --filter @skyops/api start:prod
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
@@ -34,7 +34,7 @@ services:
     branch: dev
     runtime: static
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @skyops/web build
+    buildCommand: corepack enable && export NODE_OPTIONS=--max-old-space-size=460 && pnpm install --frozen-lockfile --filter @skyops/web... && pnpm --filter @skyops/web build
     staticPublishPath: ./apps/web/dist
     envVars:
       - key: NODE_VERSION
