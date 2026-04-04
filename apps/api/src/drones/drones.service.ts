@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, Not, Repository } from 'typeorm';
+import { parseIsoDateOrThrow } from '../common/utils/date.utils';
 import { buildPaginationMeta } from '../common/utils/pagination';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
 import { Mission, MissionStatus } from '../missions/entities/mission.entity';
@@ -44,7 +45,10 @@ export class DronesService {
       );
     }
 
-    const lastMaintenanceDate = new Date(createDroneDto.lastMaintenanceDate);
+    const lastMaintenanceDate = parseIsoDateOrThrow(
+      createDroneDto.lastMaintenanceDate,
+      'Last maintenance date',
+    );
     const totalFlightHours = createDroneDto.totalFlightHours ?? 0;
     const flightHoursAtLastMaintenance =
       createDroneDto.flightHoursAtLastMaintenance ?? totalFlightHours;
@@ -164,7 +168,10 @@ export class DronesService {
     }
 
     const lastMaintenanceDate = updateDroneDto.lastMaintenanceDate
-      ? new Date(updateDroneDto.lastMaintenanceDate)
+      ? parseIsoDateOrThrow(
+          updateDroneDto.lastMaintenanceDate,
+          'Last maintenance date',
+        )
       : drone.lastMaintenanceDate;
     const totalFlightHours =
       updateDroneDto.totalFlightHours ?? drone.totalFlightHours;

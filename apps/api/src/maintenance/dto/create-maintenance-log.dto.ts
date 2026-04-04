@@ -8,6 +8,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MaintenanceType } from '../entities/maintenance-log.entity';
@@ -23,6 +24,7 @@ export class CreateMaintenanceLogDto {
 
   @ApiProperty()
   @IsString()
+  @MinLength(1)
   @MaxLength(120)
   technicianName!: string;
 

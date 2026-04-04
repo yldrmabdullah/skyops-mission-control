@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  assertOrderedDateRangeOrThrow,
+  parseIsoDateOrThrow,
+} from '../common/utils/date.utils';
 import { buildPaginationMeta } from '../common/utils/pagination';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
 import { resolveDroneStatusAfterMissionCompletion } from '../drones/utils/drone-rules';
@@ -26,8 +30,14 @@ export class MissionsService {
   ) {}
 
   async create(createMissionDto: CreateMissionDto, ownerId: string) {
-    const plannedStart = new Date(createMissionDto.plannedStart);
-    const plannedEnd = new Date(createMissionDto.plannedEnd);
+    const plannedStart = parseIsoDateOrThrow(
+      createMissionDto.plannedStart,
+      'Planned start',
+    );
+    const plannedEnd = parseIsoDateOrThrow(
+      createMissionDto.plannedEnd,
+      'Planned end',
+    );
 
     await this.getAvailableDroneOrThrow(createMissionDto.droneId, ownerId);
     this.assertValidPlannedWindow(plannedStart, plannedEnd);
@@ -49,6 +59,15 @@ export class MissionsService {
   }
 
   async findAll(query: ListMissionsQueryDto, ownerId: string) {
+    if (query.startDate && query.endDate) {
+      assertOrderedDateRangeOrThrow(
+        parseIsoDateOrThrow(query.startDate, 'startDate'),
+        parseIsoDateOrThrow(query.endDate, 'endDate'),
+        'startDate',
+        'endDate',
+      );
+    }
+
     const queryBuilder = this.missionsRepository
       .createQueryBuilder('mission')
       .leftJoinAndSelect('mission.drone', 'drone')
@@ -71,13 +90,13 @@ export class MissionsService {
 
     if (query.startDate) {
       queryBuilder.andWhere('mission.plannedStart >= :startDate', {
-        startDate: new Date(query.startDate),
+        startDate: parseIsoDateOrThrow(query.startDate, 'startDate'),
       });
     }
 
     if (query.endDate) {
       queryBuilder.andWhere('mission.plannedEnd <= :endDate', {
-        endDate: new Date(query.endDate),
+        endDate: parseIsoDateOrThrow(query.endDate, 'endDate'),
       });
     }
 
@@ -120,10 +139,10 @@ export class MissionsService {
     }
 
     const plannedStart = updateMissionDto.plannedStart
-      ? new Date(updateMissionDto.plannedStart)
+      ? parseIsoDateOrThrow(updateMissionDto.plannedStart, 'Planned start')
       : mission.plannedStart;
     const plannedEnd = updateMissionDto.plannedEnd
-      ? new Date(updateMissionDto.plannedEnd)
+      ? parseIsoDateOrThrow(updateMissionDto.plannedEnd, 'Planned end')
       : mission.plannedEnd;
     const droneId = updateMissionDto.droneId ?? mission.droneId;
     const isReassigningDrone = droneId !== mission.droneId;
@@ -154,16 +173,21 @@ export class MissionsService {
     const mission = await this.findOne(id, ownerId);
     const drone = await this.getDroneOrThrow(mission.droneId, ownerId);
 
+    if (mission.status === transitionMissionDto.status) {
+      throw new BadRequestException(`Mission is already ${mission.status}.`);
+    }
+
     assertValidMissionTransition(mission.status, transitionMissionDto.status);
 
     if (transitionMissionDto.status === MissionStatus.ABORTED) {
-      if (!transitionMissionDto.abortReason) {
+      const abortReason = transitionMissionDto.abortReason?.trim();
+      if (!abortReason) {
         throw new BadRequestException('Aborting a mission requires a reason.');
       }
 
-      mission.abortReason = transitionMissionDto.abortReason;
+      mission.abortReason = abortReason;
       mission.actualEnd = transitionMissionDto.actualEnd
-        ? new Date(transitionMissionDto.actualEnd)
+        ? parseIsoDateOrThrow(transitionMissionDto.actualEnd, 'Actual end')
         : new Date();
       mission.status = MissionStatus.ABORTED;
       drone.status = DroneStatus.AVAILABLE;
@@ -174,7 +198,7 @@ export class MissionsService {
 
     if (transitionMissionDto.status === MissionStatus.IN_PROGRESS) {
       mission.actualStart = transitionMissionDto.actualStart
-        ? new Date(transitionMissionDto.actualStart)
+        ? parseIsoDateOrThrow(transitionMissionDto.actualStart, 'Actual start')
         : new Date();
       mission.status = MissionStatus.IN_PROGRESS;
       drone.status = DroneStatus.IN_MISSION;
@@ -192,7 +216,7 @@ export class MissionsService {
 
       mission.flightHoursLogged = transitionMissionDto.flightHoursLogged;
       mission.actualEnd = transitionMissionDto.actualEnd
-        ? new Date(transitionMissionDto.actualEnd)
+        ? parseIsoDateOrThrow(transitionMissionDto.actualEnd, 'Actual end')
         : new Date();
       mission.status = MissionStatus.COMPLETED;
 

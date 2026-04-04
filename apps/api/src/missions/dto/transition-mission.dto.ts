@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -31,6 +32,7 @@ export class TransitionMissionDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 1 })
   @Min(0.1)
+  @Max(500)
   flightHoursLogged?: number;
 
   @ApiProperty({ required: false })
