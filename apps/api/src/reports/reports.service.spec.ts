@@ -74,14 +74,16 @@ describe('ReportsService', () => {
 
     const missionsRepository: Partial<IMissionsRepository> = {
       countByDroneId: jest.fn().mockResolvedValue(0),
-      findAll: jest.fn().mockResolvedValue([
-        [
-          { status: MissionStatus.PLANNED },
-          { status: MissionStatus.PLANNED },
-          { status: MissionStatus.COMPLETED },
-        ],
-        3,
-      ]),
+      findAll: jest
+        .fn()
+        .mockResolvedValue([
+          [
+            { status: MissionStatus.PLANNED },
+            { status: MissionStatus.PLANNED },
+            { status: MissionStatus.COMPLETED },
+          ],
+          3,
+        ]),
     };
 
     const maintenanceLogsRepository: Partial<IMaintenanceLogsRepository> = {
