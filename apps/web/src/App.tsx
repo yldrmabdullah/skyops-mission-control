@@ -24,8 +24,8 @@ export function App() {
           element={<ChangePasswordPage />}
         />
         <Route element={<AppLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="dashboard" element={<Navigate replace to="/" />} />
+          <Route index element={<Navigate replace to="/dashboard" />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="drones" element={<DronesPage />} />
           <Route path="drones/:droneId" element={<DroneDetailPage />} />
           <Route path="missions" element={<MissionsPage />} />
