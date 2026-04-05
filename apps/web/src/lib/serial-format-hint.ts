@@ -1,3 +1,6 @@
+const SERIAL_FORMAT_OK =
+  'Matches the required SKY-XXXX-XXXX pattern.' as const;
+
 export function getSerialFormatHint(raw: string): {
   valid: boolean;
   text: string;
@@ -5,7 +8,7 @@ export function getSerialFormatHint(raw: string): {
   const v = raw.trim().toUpperCase();
 
   if (/^SKY-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(v)) {
-    return { valid: true, text: 'Matches the required SKY-XXXX-XXXX pattern.' };
+    return { valid: true, text: SERIAL_FORMAT_OK };
   }
 
   if (v.length === 0) {
@@ -95,5 +98,5 @@ export function getSerialFormatHint(raw: string): {
     };
   }
 
-  return { valid: true, text: 'Matches the required SKY-XXXX-XXXX pattern.' };
+  return { valid: true, text: SERIAL_FORMAT_OK };
 }

@@ -6,9 +6,15 @@ export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 export interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<AuthUser>;
+  /** First workspace Manager only, when the API reports no users yet. */
+  bootstrapWorkspace: (
+    email: string,
+    password: string,
+    fullName: string,
+  ) => Promise<void>;
   signOut: () => void;
+  refreshProfile: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

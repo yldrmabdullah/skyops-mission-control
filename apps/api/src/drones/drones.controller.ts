@@ -4,12 +4,22 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { OperatorRole } from '../auth/operator-role.enum';
 import type { JwtPayloadUser } from '../auth/strategies/jwt.strategy';
 import { CreateDroneDto } from './dto/create-drone.dto';
 import { ListDronesQueryDto } from './dto/list-drones-query.dto';
@@ -23,37 +33,76 @@ export class DronesController {
   constructor(private readonly dronesService: DronesService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Register a drone (Manager only)' })
+  @ApiResponse({ status: 201, description: 'Drone created' })
+  @ApiResponse({ status: 403, description: 'Insufficient role' })
+  @ApiResponse({ status: 409, description: 'Serial number conflict' })
+  @UseGuards(RolesGuard)
+  @Roles(OperatorRole.MANAGER)
   create(
     @CurrentUser() user: JwtPayloadUser,
     @Body() createDroneDto: CreateDroneDto,
   ) {
-    return this.dronesService.create(createDroneDto, user.userId);
+    return this.dronesService.create(
+      createDroneDto,
+      user.fleetOwnerId,
+      user.userId,
+    );
   }
 
   @Get()
+  @ApiOperation({ summary: 'List drones for the current operator' })
+  @ApiResponse({ status: 200, description: 'Paginated drones' })
   findAll(
     @CurrentUser() user: JwtPayloadUser,
     @Query() query: ListDronesQueryDto,
   ) {
-    return this.dronesService.findAll(query, user.userId);
+    return this.dronesService.findAll(query, user.fleetOwnerId);
   }
 
   @Get(':id')
-  findOne(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
-    return this.dronesService.findOne(id, user.userId);
+  @ApiOperation({ summary: 'Get one drone with relations' })
+  @ApiResponse({ status: 200, description: 'Drone detail' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  findOne(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.dronesService.findOne(id, user.fleetOwnerId, user.role);
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update drone profile (Manager only)' })
+  @ApiResponse({ status: 200, description: 'Updated drone' })
+  @ApiResponse({ status: 403, description: 'Insufficient role' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @UseGuards(RolesGuard)
+  @Roles(OperatorRole.MANAGER)
   update(
     @CurrentUser() user: JwtPayloadUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDroneDto: UpdateDroneDto,
   ) {
-    return this.dronesService.update(id, updateDroneDto, user.userId);
+    return this.dronesService.update(
+      id,
+      updateDroneDto,
+      user.fleetOwnerId,
+      user.userId,
+    );
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
-    return this.dronesService.remove(id, user.userId);
+  @ApiOperation({ summary: 'Delete drone (Manager only, no history)' })
+  @ApiResponse({ status: 200, description: 'Deleted' })
+  @ApiResponse({ status: 400, description: 'Has missions or maintenance' })
+  @ApiResponse({ status: 403, description: 'Insufficient role' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @UseGuards(RolesGuard)
+  @Roles(OperatorRole.MANAGER)
+  remove(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.dronesService.remove(id, user.fleetOwnerId, user.userId);
   }
 }

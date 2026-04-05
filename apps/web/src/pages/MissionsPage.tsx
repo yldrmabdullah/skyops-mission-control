@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useDeferredValue, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useAuth } from '../auth/use-auth';
+import { FormNotice } from '../components/FormNotice';
 import { StatePanel } from '../components/StatePanel';
 import { EmptyState, SurfaceCard } from '../components/SurfaceCard';
 import { useNotifications } from '../components/use-notifications';
@@ -9,6 +17,10 @@ import {
   MissionTimelineTable,
   SelectedMissionPanel,
 } from '../features/missions/MissionPanels';
+import {
+  missionSortOrderToParam,
+  resolveMissionListSort,
+} from '../features/missions/mission-list-sort';
 import { MissionPlanForm } from '../features/missions/MissionPlanForm';
 import { MissionTransitionForm } from '../features/missions/MissionTransitionForm';
 import {
@@ -19,8 +31,16 @@ import {
   transitionMission,
   updateMission,
 } from '../lib/api';
+import {
+  localDateToEndOfDayIso,
+  localDateToStartOfDayIso,
+} from '../lib/date-iso-range';
+import { invalidateMissionBoardQueries } from '../lib/query-invalidation';
+import { canScheduleMissions } from '../lib/roles';
+import { useFeedbackState } from '../hooks/use-feedback-state';
 import type {
   CreateMissionPayload,
+  MissionListSortField,
   MissionStatus,
   TransitionMissionPayload,
 } from '../types/api';
@@ -30,32 +50,30 @@ interface MissionFiltersState {
   droneId: string;
   startDate: string;
   endDate: string;
+  search: string;
 }
 
 export function MissionsPage() {
+  const { user } = useAuth();
   const { notify } = useNotifications();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sortBy, sortOrder } = resolveMissionListSort(searchParams);
+  const allowMissionEdits = canScheduleMissions(user?.role);
   const [filters, setFilters] = useState<MissionFiltersState>({
     status: '',
     droneId: '',
     startDate: '',
     endDate: '',
+    search: '',
   });
   const [selectedMissionId, setSelectedMissionId] = useState('');
   const [createSuccessCount, setCreateSuccessCount] = useState(0);
-  const [createFeedback, setCreateFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
-  const [editFeedback, setEditFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
-  const [transitionFeedback, setTransitionFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
+  const createFeedback = useFeedbackState();
+  const editFeedback = useFeedbackState();
+  const transitionFeedback = useFeedbackState();
 
   const queryClient = useQueryClient();
+  const deferredMissionSearch = useDeferredValue(filters.search);
 
   const dronesQuery = useQuery({
     queryKey: ['drones', 'missions-page'],
@@ -69,25 +87,35 @@ export function MissionsPage() {
       filters.droneId,
       filters.startDate,
       filters.endDate,
+      deferredMissionSearch.trim(),
+      sortBy,
+      sortOrder,
     ],
     queryFn: () =>
       fetchMissions({
         status: filters.status || undefined,
         droneId: filters.droneId || undefined,
         startDate: filters.startDate
-          ? new Date(`${filters.startDate}T00:00:00`).toISOString()
+          ? localDateToStartOfDayIso(filters.startDate)
           : undefined,
         endDate: filters.endDate
-          ? new Date(`${filters.endDate}T23:59:59`).toISOString()
+          ? localDateToEndOfDayIso(filters.endDate)
           : undefined,
+        search: deferredMissionSearch.trim() || undefined,
+        sortBy,
+        sortOrder,
       }),
+    placeholderData: keepPreviousData,
   });
   const dronesResponse = dronesQuery.data;
   const missionsResponse = missionsQuery.data;
-  const isLoading = missionsQuery.isLoading;
+  const isTimelineLoading =
+    missionsQuery.isPending && missionsQuery.data === undefined;
+  const isMissionListBackgroundFetch =
+    missionsQuery.isFetching && missionsQuery.data !== undefined;
 
-  const drones = dronesResponse?.data ?? [];
-  const missions = missionsResponse?.data ?? [];
+  const drones = dronesQuery.isError ? [] : (dronesResponse?.data ?? []);
+  const missions = missionsQuery.isError ? [] : (missionsResponse?.data ?? []);
   const activeMissionId = missions.some(
     (mission) => mission.id === selectedMissionId,
   )
@@ -101,18 +129,10 @@ export function MissionsPage() {
       drone.status === 'AVAILABLE' || drone.id === selectedMission?.droneId,
   );
 
-  async function refreshMissionData() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['missions'] }),
-      queryClient.invalidateQueries({ queryKey: ['fleet-health'] }),
-      queryClient.invalidateQueries({ queryKey: ['drones'] }),
-    ]);
-  }
-
   const createMissionMutation = useMutation({
     mutationFn: (payload: CreateMissionPayload) => createMission(payload),
     onSuccess: async (mission) => {
-      setCreateFeedback({
+      createFeedback.setFeedback({
         tone: 'success',
         message: 'Mission scheduled successfully.',
       });
@@ -123,10 +143,10 @@ export function MissionsPage() {
         description: 'The mission has been added to the active board.',
       });
       setSelectedMissionId(mission.id);
-      await refreshMissionData();
+      await invalidateMissionBoardQueries(queryClient);
     },
     onError: (error) => {
-      setCreateFeedback({
+      createFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
@@ -142,7 +162,7 @@ export function MissionsPage() {
       payload: CreateMissionPayload;
     }) => updateMission(missionId, payload),
     onSuccess: async (mission) => {
-      setEditFeedback({
+      editFeedback.setFeedback({
         tone: 'success',
         message: 'Mission plan updated successfully.',
       });
@@ -152,10 +172,10 @@ export function MissionsPage() {
         description: 'The mission plan has been saved successfully.',
       });
       setSelectedMissionId(mission.id);
-      await refreshMissionData();
+      await invalidateMissionBoardQueries(queryClient);
     },
     onError: (error) => {
-      setEditFeedback({
+      editFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
@@ -171,7 +191,7 @@ export function MissionsPage() {
       payload: TransitionMissionPayload;
     }) => transitionMission(missionId, payload),
     onSuccess: async () => {
-      setTransitionFeedback({
+      transitionFeedback.setFeedback({
         tone: 'success',
         message: 'Mission status updated successfully.',
       });
@@ -180,20 +200,20 @@ export function MissionsPage() {
         title: 'Mission transitioned',
         description: 'The lifecycle state was updated successfully.',
       });
-      await refreshMissionData();
+      await invalidateMissionBoardQueries(queryClient);
     },
     onError: (error) => {
-      setTransitionFeedback({
+      transitionFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
     },
   });
 
-  if (dronesQuery.isError || missionsQuery.isError) {
+  if (missionsQuery.isError && dronesQuery.isError) {
     return (
       <StatePanel
-        actionHref="/dashboard"
+        actionHref="/"
         actionLabel="Return to dashboard"
         description={getErrorMessage(dronesQuery.error ?? missionsQuery.error)}
         title="Unable to load mission control"
@@ -204,6 +224,20 @@ export function MissionsPage() {
 
   return (
     <>
+      {dronesQuery.isError ? (
+        <div className="section-spaced">
+          <FormNotice
+            message="Drone list failed to load; mission filters may be limited."
+            tone="warning"
+          />
+        </div>
+      ) : null}
+      {missionsQuery.isError ? (
+        <div className="section-spaced">
+          <FormNotice message="Mission list failed to load." tone="warning" />
+        </div>
+      ) : null}
+
       <header className="page-header">
         <div>
           <div className="badge">Mission Management</div>
@@ -217,7 +251,8 @@ export function MissionsPage() {
           </p>
         </div>
         <div className="badge">
-          {missionsResponse?.meta.total ?? 0} tracked missions
+          {missionsQuery.isError ? 0 : (missionsResponse?.meta.total ?? 0)}{' '}
+          tracked missions
         </div>
       </header>
 
@@ -225,6 +260,7 @@ export function MissionsPage() {
         drones={drones}
         droneId={filters.droneId}
         endDate={filters.endDate}
+        search={filters.search}
         startDate={filters.startDate}
         status={filters.status}
         onChange={(nextFilters) =>
@@ -237,75 +273,117 @@ export function MissionsPage() {
 
       <section className="panel-grid split">
         <SurfaceCard
-          description="Only currently available drones can be assigned at planning time."
+          description={
+            allowMissionEdits
+              ? 'Only currently available drones can be assigned at planning time.'
+              : 'Scheduling and lifecycle changes are limited to Pilots and Managers.'
+          }
           title="Schedule mission"
         >
-          <MissionComposerForm
-            key={createSuccessCount}
-            drones={drones}
-            feedback={createFeedback}
-            isPending={createMissionMutation.isPending}
-            onSubmit={(payload) => {
-              setCreateFeedback(null);
-              createMissionMutation.mutate(payload);
-            }}
-          />
+          {allowMissionEdits ? (
+            <MissionComposerForm
+              key={createSuccessCount}
+              drones={drones}
+              feedback={createFeedback.feedback}
+              isPending={createMissionMutation.isPending}
+              onSubmit={(payload) => {
+                createFeedback.clearFeedback();
+                createMissionMutation.mutate(payload);
+              }}
+            />
+          ) : (
+            <EmptyState>
+              Your role can review the timeline below; mission changes are not
+              available here.
+            </EmptyState>
+          )}
         </SurfaceCard>
 
         <SelectedMissionPanel mission={selectedMission}>
-          {selectedMission?.status === 'PLANNED' ? (
+          {allowMissionEdits ? (
             <>
-              <MissionPlanForm
-                key={`${selectedMission.id}-${selectedMission.plannedStart}-${selectedMission.plannedEnd}`}
-                drones={assignableDrones}
-                feedback={editFeedback}
-                isPending={updateMissionMutation.isPending}
-                mission={selectedMission}
-                onSubmit={(payload) => {
-                  setEditFeedback(null);
-                  updateMissionMutation.mutate({
-                    missionId: selectedMission.id,
-                    payload,
-                  });
-                }}
-              />
-              <hr className="card-divider" />
-            </>
-          ) : (
-            <>
-              <EmptyState>
-                Direct editing is locked after pre-flight activity begins.
-              </EmptyState>
-              <hr className="card-divider" />
-            </>
-          )}
+              {selectedMission?.status === 'PLANNED' ? (
+                <>
+                  <MissionPlanForm
+                    key={`${selectedMission.id}-${selectedMission.plannedStart}-${selectedMission.plannedEnd}`}
+                    drones={assignableDrones}
+                    feedback={editFeedback.feedback}
+                    isPending={updateMissionMutation.isPending}
+                    mission={selectedMission}
+                    onSubmit={(payload) => {
+                      editFeedback.clearFeedback();
+                      updateMissionMutation.mutate({
+                        missionId: selectedMission.id,
+                        payload,
+                      });
+                    }}
+                  />
+                  <hr className="card-divider" />
+                </>
+              ) : (
+                <>
+                  <EmptyState>
+                    Direct editing is locked after pre-flight activity begins.
+                  </EmptyState>
+                  <hr className="card-divider" />
+                </>
+              )}
 
-          {selectedMission ? (
-            <MissionTransitionForm
-              key={`${selectedMission.id}-${selectedMission.status}`}
-              feedback={transitionFeedback}
-              isPending={transitionMutation.isPending}
-              mission={selectedMission}
-              onSubmit={(payload) => {
-                setTransitionFeedback(null);
-                transitionMutation.mutate({
-                  missionId: selectedMission.id,
-                  payload,
-                });
-              }}
-            />
-          ) : null}
+              {selectedMission ? (
+                <MissionTransitionForm
+                  key={`${selectedMission.id}-${selectedMission.status}`}
+                  feedback={transitionFeedback.feedback}
+                  isPending={transitionMutation.isPending}
+                  mission={selectedMission}
+                  onSubmit={(payload) => {
+                    transitionFeedback.clearFeedback();
+                    transitionMutation.mutate({
+                      missionId: selectedMission.id,
+                      payload,
+                    });
+                  }}
+                />
+              ) : null}
+            </>
+          ) : selectedMission ? (
+            <p className="muted">
+              Lifecycle changes require a Pilot or Manager account.
+            </p>
+          ) : (
+            <EmptyState>
+              Select a mission in the table for read-only context.
+            </EmptyState>
+          )}
         </SelectedMissionPanel>
       </section>
 
       <MissionTimelineTable
-        isLoading={isLoading}
+        isBackgroundFetching={isMissionListBackgroundFetch}
+        isLoading={isTimelineLoading}
         missions={missions}
         selectedMissionId={activeMissionId}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
         onSelect={(missionId) => {
           setSelectedMissionId(missionId);
-          setEditFeedback(null);
-          setTransitionFeedback(null);
+          editFeedback.clearFeedback();
+          transitionFeedback.clearFeedback();
+        }}
+        onSortChange={(field: MissionListSortField) => {
+          const nextParams = new URLSearchParams(searchParams);
+          if (sortBy === field) {
+            nextParams.set(
+              'order',
+              missionSortOrderToParam(sortOrder === 'ASC' ? 'DESC' : 'ASC'),
+            );
+          } else {
+            nextParams.set('sort', field);
+            nextParams.set('order', 'asc');
+          }
+          setSearchParams(nextParams, {
+            replace: true,
+            preventScrollReset: true,
+          });
         }}
       />
     </>

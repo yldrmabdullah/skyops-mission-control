@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../auth/use-auth';
 import { StatePanel } from '../components/StatePanel';
 import { SurfaceCard } from '../components/SurfaceCard';
+import { StatusPill } from '../components/StatusPill';
 import { useNotifications } from '../components/use-notifications';
 import { DroneDangerZone } from '../features/drones/DroneDangerZone';
 import { DroneProfileForm } from '../features/drones/DroneProfileForm';
@@ -12,32 +14,27 @@ import {
   MaintenanceHistoryPanel,
   MissionHistoryPanel,
 } from '../features/drones/DronePanels';
+import { useFeedbackState } from '../hooks/use-feedback-state';
 import {
   createMaintenanceLog,
   deleteDrone,
   fetchDrone,
   getErrorMessage,
   updateDrone,
+  uploadMaintenanceAttachment,
 } from '../lib/api';
-import { StatusPill } from '../components/StatusPill';
+import { invalidateDroneRelatedQueries } from '../lib/query-invalidation';
+import { canManageFleet, canRecordMaintenance } from '../lib/roles';
 
 export function DroneDetailPage() {
+  const { user } = useAuth();
   const { notify } = useNotifications();
   const { droneId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [profileFeedback, setProfileFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
-  const [maintenanceFeedback, setMaintenanceFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
-  const [deleteFeedback, setDeleteFeedback] = useState<{
-    tone: 'success' | 'error';
-    message: string;
-  } | null>(null);
+  const profileFeedback = useFeedbackState();
+  const maintenanceFeedback = useFeedbackState();
+  const deleteFeedback = useFeedbackState();
   const [isDeleteArmed, setIsDeleteArmed] = useState(false);
 
   const droneQuery = useQuery({
@@ -48,19 +45,11 @@ export function DroneDetailPage() {
   const drone = droneQuery.data;
   const isLoading = droneQuery.isLoading;
 
-  async function refreshDroneData() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['drone', droneId] }),
-      queryClient.invalidateQueries({ queryKey: ['drones'] }),
-      queryClient.invalidateQueries({ queryKey: ['fleet-health'] }),
-    ]);
-  }
-
   const updateDroneMutation = useMutation({
     mutationFn: (payload: Parameters<typeof updateDrone>[1]) =>
       updateDrone(droneId, payload),
     onSuccess: async () => {
-      setProfileFeedback({
+      profileFeedback.setFeedback({
         tone: 'success',
         message: 'Drone profile updated successfully.',
       });
@@ -69,10 +58,10 @@ export function DroneDetailPage() {
         title: 'Drone updated',
         description: 'The drone profile is now up to date.',
       });
-      await refreshDroneData();
+      await invalidateDroneRelatedQueries(queryClient, droneId);
     },
     onError: (error) => {
-      setProfileFeedback({
+      profileFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
@@ -80,9 +69,21 @@ export function DroneDetailPage() {
   });
 
   const createMaintenanceLogMutation = useMutation({
-    mutationFn: createMaintenanceLog,
+    mutationFn: async ({
+      payload,
+      file,
+    }: {
+      payload: Parameters<typeof createMaintenanceLog>[0];
+      file?: File;
+    }) => {
+      const log = await createMaintenanceLog(payload);
+      if (file) {
+        await uploadMaintenanceAttachment(log.id, file);
+      }
+      return log;
+    },
     onSuccess: async () => {
-      setMaintenanceFeedback({
+      maintenanceFeedback.setFeedback({
         tone: 'success',
         message: 'Maintenance log added successfully.',
       });
@@ -91,10 +92,10 @@ export function DroneDetailPage() {
         title: 'Maintenance recorded',
         description: 'The maintenance history and due dates were refreshed.',
       });
-      await refreshDroneData();
+      await invalidateDroneRelatedQueries(queryClient, droneId);
     },
     onError: (error) => {
-      setMaintenanceFeedback({
+      maintenanceFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
@@ -116,7 +117,7 @@ export function DroneDetailPage() {
       void navigate('/drones');
     },
     onError: (error) => {
-      setDeleteFeedback({
+      deleteFeedback.setFeedback({
         tone: 'error',
         message: getErrorMessage(error),
       });
@@ -165,6 +166,8 @@ export function DroneDetailPage() {
   }
 
   const canDelete = !drone.missions?.length && !drone.maintenanceLogs?.length;
+  const allowFleetEdits = canManageFleet(user?.role);
+  const allowMaintenance = canRecordMaintenance(user?.role);
 
   return (
     <>
@@ -186,75 +189,111 @@ export function DroneDetailPage() {
       </header>
 
       <section className="panel-grid split">
-        <SurfaceCard
-          actions={
-            <span className="muted">
-              Keep serial, status, and maintenance data aligned
-            </span>
-          }
-          title="Edit profile"
-        >
-          <DroneProfileForm
-            key={`${drone.id}-${drone.status}-${drone.totalFlightHours}-${drone.lastMaintenanceDate}`}
-            drone={drone}
-            feedback={profileFeedback}
-            isPending={updateDroneMutation.isPending}
-            onSubmit={(payload) => {
-              setProfileFeedback(null);
-              updateDroneMutation.mutate(payload);
-            }}
-          />
-        </SurfaceCard>
+        {allowFleetEdits ? (
+          <SurfaceCard
+            actions={
+              <span className="muted">
+                Keep serial, status, and maintenance data aligned
+              </span>
+            }
+            title="Edit profile"
+          >
+            <DroneProfileForm
+              key={`${drone.id}-${drone.status}-${drone.totalFlightHours}-${drone.lastMaintenanceDate}`}
+              drone={drone}
+              feedback={profileFeedback.feedback}
+              isPending={updateDroneMutation.isPending}
+              onSubmit={(payload) => {
+                profileFeedback.clearFeedback();
+                updateDroneMutation.mutate(payload);
+              }}
+            />
+          </SurfaceCard>
+        ) : (
+          <SurfaceCard
+            title="Profile"
+            description="Fleet profile changes are limited to workspace managers."
+          >
+            <p className="muted">
+              You are signed in as <strong>{user?.role}</strong>. View-only
+              access to this drone&apos;s registry data.
+            </p>
+          </SurfaceCard>
+        )}
 
-        <SurfaceCard
-          actions={
-            <span className="muted">
-              Routine checks and repairs update due dates automatically
-            </span>
-          }
-          title="Add maintenance log"
-        >
-          <MaintenanceLogForm
-            key={`${drone.id}-${drone.totalFlightHours}-${drone.maintenanceLogs?.length ?? 0}`}
-            droneId={droneId}
-            totalFlightHours={drone.totalFlightHours}
-            feedback={maintenanceFeedback}
-            isPending={createMaintenanceLogMutation.isPending}
-            onSubmit={(payload) => {
-              setMaintenanceFeedback(null);
-              createMaintenanceLogMutation.mutate(payload);
-            }}
-          />
-        </SurfaceCard>
+        {allowMaintenance ? (
+          <SurfaceCard
+            actions={
+              <span className="muted">
+                Routine checks and repairs update due dates automatically
+              </span>
+            }
+            title="Add maintenance log"
+          >
+            <MaintenanceLogForm
+              key={`${drone.id}-${drone.totalFlightHours}-${drone.maintenanceLogs?.length ?? 0}`}
+              droneId={droneId}
+              totalFlightHours={drone.totalFlightHours}
+              feedback={maintenanceFeedback.feedback}
+              isPending={createMaintenanceLogMutation.isPending}
+              onSubmit={(payload, options) => {
+                maintenanceFeedback.clearFeedback();
+                createMaintenanceLogMutation.mutate({
+                  payload,
+                  file: options?.file,
+                });
+              }}
+            />
+          </SurfaceCard>
+        ) : (
+          <SurfaceCard
+            title="Maintenance"
+            description="Technicians and managers record maintenance events."
+          >
+            <p className="muted">
+              Your role ({user?.role}) cannot create maintenance logs in this
+              workspace.
+            </p>
+          </SurfaceCard>
+        )}
       </section>
 
       <section className="panel-grid split section-spaced">
         <DroneSummaryPanel drone={drone} />
-        <MaintenanceHistoryPanel drone={drone} />
+        <MaintenanceHistoryPanel
+          drone={drone}
+          emptyHint={
+            user?.role === 'PILOT'
+              ? 'Detailed maintenance history is visible to Technicians and Managers only.'
+              : undefined
+          }
+        />
       </section>
 
       <section className="section-spaced">
         <MissionHistoryPanel drone={drone} />
       </section>
 
-      <section className="section-spaced">
-        <DroneDangerZone
-          canDelete={canDelete}
-          feedback={deleteFeedback}
-          isDeleteArmed={isDeleteArmed}
-          isPending={deleteDroneMutation.isPending}
-          onDelete={() => {
-            setDeleteFeedback(null);
+      {allowFleetEdits ? (
+        <section className="section-spaced">
+          <DroneDangerZone
+            canDelete={canDelete}
+            feedback={deleteFeedback.feedback}
+            isDeleteArmed={isDeleteArmed}
+            isPending={deleteDroneMutation.isPending}
+            onDelete={() => {
+              deleteFeedback.clearFeedback();
 
-            if (!isDeleteArmed) {
-              setIsDeleteArmed(true);
-              return;
-            }
+              if (!isDeleteArmed) {
+                setIsDeleteArmed(true);
+                return;
+              }
 
-            deleteDroneMutation.mutate();
-          }}
-        />
-      </section>
+              deleteDroneMutation.mutate();
+            }}
+          />
+        </section>
+      ) : null}
     </>
   );
 }

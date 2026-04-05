@@ -1,14 +1,32 @@
+import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/use-auth';
 import { AuthShell } from '../components/AuthShell';
 import { FormNotice } from '../components/FormNotice';
+import { ManagerSignupExplainer } from '../components/ManagerSignupExplainer';
+import { fetchAuthStatus, getErrorMessage } from '../lib/api';
 
 const PASSWORD_HINT =
   'At least 8 characters, including one letter and one number.';
 
+function describeSignupFailure(error: unknown): string {
+  const detail = getErrorMessage(error);
+
+  if (axios.isAxiosError(error) && error.response?.status === 409) {
+    return `${detail} Try signing in, or use a different email address.`;
+  }
+
+  if (axios.isAxiosError(error) && error.response?.status === 400) {
+    return detail || 'Please check the form and try again.';
+  }
+
+  return detail || 'Something went wrong. Please try again.';
+}
+
 export function SignUpPage() {
-  const { signUp, status } = useAuth();
+  const { bootstrapWorkspace, status } = useAuth();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -18,9 +36,15 @@ export function SignUpPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const statusQuery = useQuery({
+    queryKey: ['auth-status'],
+    queryFn: fetchAuthStatus,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
     if (status === 'authenticated') {
-      navigate('/dashboard', { replace: true });
+      navigate('/', { replace: true });
     }
   }, [status, navigate]);
 
@@ -46,18 +70,16 @@ export function SignUpPage() {
     setSubmitting(true);
 
     try {
-      await signUp(email.trim(), password, fullName.trim());
-      navigate('/dashboard', { replace: true });
-    } catch {
-      setFormError(
-        'Could not create your account. The email may already be registered.',
-      );
+      await bootstrapWorkspace(email.trim(), password, fullName.trim());
+      navigate('/', { replace: true });
+    } catch (error) {
+      setFormError(describeSignupFailure(error));
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (status === 'loading') {
+  if (status === 'loading' || statusQuery.isPending) {
     return (
       <div className="auth-boot">
         <div className="auth-boot-inner">
@@ -68,31 +90,70 @@ export function SignUpPage() {
     );
   }
 
+  if (statusQuery.isError) {
+    return (
+      <AuthShell
+        brandContent={
+          <div className="auth-shell-brand-stack">
+            <ManagerSignupExplainer />
+          </div>
+        }
+        footer={
+          <p className="muted auth-switch">
+            <Link className="auth-inline-link" to="/sign-in">
+              Back to sign in
+            </Link>
+          </p>
+        }
+        subtitle="We could not reach the server to verify sign-up availability."
+        title="Connection issue"
+      >
+        <FormNotice
+          message="Try again in a moment or contact support if the problem continues."
+          tone="error"
+        />
+      </AuthShell>
+    );
+  }
+
   return (
     <AuthShell
+      brandContent={
+        <div className="auth-shell-brand-stack">
+          <ManagerSignupExplainer />
+        </div>
+      }
       footer={
         <p className="muted auth-switch">
-          Already registered?{' '}
+          Already have an account?{' '}
           <Link className="auth-inline-link" to="/sign-in">
-            Sign in instead
+            Sign in
           </Link>
         </p>
       }
-      subtitle="Create a secure operator profile. You will be signed in immediately after registration."
-      title="Join the operations console"
+      subtitle="You will be the Workspace Manager with full fleet access. Pilot and Technician accounts are added later from Settings."
+      title="Sign up"
     >
+      <div className="signup-form-preamble">
+        <span className="signup-form-ribbon">Workspace Manager</span>
+        <p className="signup-form-hint muted">
+          Registration for fleet owners and operations managers. Manage drones,
+          schedule missions, and invite your crew from Settings.
+        </p>
+      </div>
+
       {formError ? <FormNotice message={formError} tone="error" /> : null}
 
       <form className="auth-form" onSubmit={onSubmit}>
         <label className="field">
-          <span className="field-label">Full name</span>
+          <span className="field-label">Your full name</span>
           <input
             required
             autoComplete="name"
             className="input"
             data-testid="signup-name-input"
             minLength={2}
-            placeholder="Jane Pilot"
+            placeholder="Alex Rivera"
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
           />
@@ -106,11 +167,14 @@ export function SignUpPage() {
             className="input"
             data-testid="signup-email-input"
             inputMode="email"
-            placeholder="you@skyops.io"
+            placeholder="you@operations.example"
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
+          <span className="muted field-hint">
+            This email will be your Manager login for this workspace.
+          </span>
         </label>
 
         <label className="field">
@@ -161,7 +225,9 @@ export function SignUpPage() {
             disabled={submitting}
             type="submit"
           >
-            {submitting ? 'Creating account…' : 'Create account'}
+            {submitting
+              ? 'Creating Manager account…'
+              : 'Create Manager account'}
           </button>
         </div>
       </form>

@@ -85,3 +85,24 @@ export function isMaintenanceDueWithinDays(
   threshold.setUTCDate(threshold.getUTCDate() + days);
   return nextMaintenanceDueDate.getTime() <= threshold.getTime();
 }
+
+/** Dashboard / watchlist: due within 7 days by calendar or 50h since last maintenance. */
+export function isMaintenanceWatchlistCandidate(params: {
+  totalFlightHours: number;
+  flightHoursAtLastMaintenance: number;
+  nextMaintenanceDueDate: Date;
+  referenceDate?: Date;
+}) {
+  const referenceNow = params.referenceDate ?? new Date();
+  const hoursSinceMaintenance = calculateFlightHoursSinceMaintenance(
+    params.totalFlightHours,
+    params.flightHoursAtLastMaintenance,
+  );
+  const dueByFlightHours = hoursSinceMaintenance >= HOURS_BETWEEN_MAINTENANCE;
+  const inHorizon = isMaintenanceDueWithinDays(
+    params.nextMaintenanceDueDate,
+    7,
+    referenceNow,
+  );
+  return inHorizon || dueByFlightHours;
+}
