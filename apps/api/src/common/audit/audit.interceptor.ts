@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  Scope,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
@@ -38,7 +39,7 @@ function extractAuditMetadata(result: unknown): Record<string, unknown> {
   return {};
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class AuditInterceptor implements NestInterceptor {
   constructor(
     private readonly reflector: Reflector,
