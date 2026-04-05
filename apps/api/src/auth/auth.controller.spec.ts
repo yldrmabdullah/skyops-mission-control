@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { createMockJwtUser } from '../test-utils/mock-jwt-user';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
@@ -6,7 +7,7 @@ describe('AuthController', () => {
   let controller: AuthController;
   let service: AuthService;
 
-  const mockUser = { userId: 'user-1', email: 'test@test.com' };
+  const mockUser = createMockJwtUser({ email: 'test@test.com' });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -30,7 +31,7 @@ describe('AuthController', () => {
 
   it('should call updatePrefs with correct DTO', async () => {
     const dto = { emailOnMaintenanceDue: true };
-    await controller.updatePrefs(mockUser as any, dto);
+    await controller.updatePrefs(mockUser, dto);
     expect(service.updateNotificationPreferences).toHaveBeenCalledWith(
       'user-1',
       dto,
