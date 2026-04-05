@@ -1,19 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { createMockJwtUser } from '../test-utils/mock-jwt-user';
 import { MissionsController } from './missions.controller';
-import { MissionsService } from './missions.service';
-import { CreateMissionDto } from './dto/create-mission.dto';
+import { CreateMissionUseCase } from './use-cases/create-mission.use-case';
+import { ListMissionsUseCase } from './use-cases/list-missions.use-case';
+import { GetMissionUseCase } from './use-cases/get-mission.use-case';
+import { UpdateMissionUseCase } from './use-cases/update-mission.use-case';
+import { TransitionMissionUseCase } from './use-cases/transition-mission.use-case';
 import { MissionStatus, MissionType } from './entities/mission.entity';
-import { TransitionMissionDto } from './dto/transition-mission.dto';
-import { UpdateMissionDto } from './dto/update-mission.dto';
 
 describe('MissionsController', () => {
   let controller: MissionsController;
-  let service: MissionsService;
+  let createMission: CreateMissionUseCase;
+  let listMissions: ListMissionsUseCase;
+  let getMission: GetMissionUseCase;
+  let updateMission: UpdateMissionUseCase;
+  let transitionMission: TransitionMissionUseCase;
 
-  const mockUser = createMockJwtUser();
-
-  const createDto: CreateMissionDto = {
+  const createDto = {
     name: 'Mission',
     type: MissionType.WIND_TURBINE_INSPECTION,
     droneId: 'd1',
@@ -23,46 +25,40 @@ describe('MissionsController', () => {
     plannedEnd: new Date(Date.now() + 3600_000).toISOString(),
   };
 
-  const updateDto: UpdateMissionDto = {};
-  const transitionDto: TransitionMissionDto = {
-    status: MissionStatus.PRE_FLIGHT_CHECK,
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MissionsController],
       providers: [
-        {
-          provide: MissionsService,
-          useValue: {
-            create: jest.fn(),
-            findAll: jest.fn(),
-            findOne: jest.fn(),
-            update: jest.fn(),
-            transition: jest.fn(),
-          },
-        },
+        { provide: CreateMissionUseCase, useValue: { execute: jest.fn() } },
+        { provide: ListMissionsUseCase, useValue: { execute: jest.fn() } },
+        { provide: GetMissionUseCase, useValue: { execute: jest.fn() } },
+        { provide: UpdateMissionUseCase, useValue: { execute: jest.fn() } },
+        { provide: TransitionMissionUseCase, useValue: { execute: jest.fn() } },
       ],
     }).compile();
 
     controller = module.get<MissionsController>(MissionsController);
-    service = module.get<MissionsService>(MissionsService);
+    createMission = module.get<CreateMissionUseCase>(CreateMissionUseCase);
+    listMissions = module.get<ListMissionsUseCase>(ListMissionsUseCase);
+    getMission = module.get<GetMissionUseCase>(GetMissionUseCase);
+    updateMission = module.get<UpdateMissionUseCase>(UpdateMissionUseCase);
+    transitionMission = module.get<TransitionMissionUseCase>(TransitionMissionUseCase);
   });
 
-  it('should delegate to service for all methods', async () => {
-    await controller.create(mockUser, createDto);
-    expect(service.create).toHaveBeenCalled();
+  it('should delegate to use cases for all methods', async () => {
+    await controller.create(createDto as any);
+    expect(createMission.execute).toHaveBeenCalledWith(createDto);
 
-    await controller.findAll(mockUser, { page: 1, limit: 10 });
-    expect(service.findAll).toHaveBeenCalled();
+    await controller.findAll({ page: 1, limit: 10 } as any);
+    expect(listMissions.execute).toHaveBeenCalled();
 
-    await controller.findOne(mockUser, 'm1');
-    expect(service.findOne).toHaveBeenCalled();
+    await controller.findOne('m1');
+    expect(getMission.execute).toHaveBeenCalledWith('m1');
 
-    await controller.update(mockUser, 'm1', updateDto);
-    expect(service.update).toHaveBeenCalled();
+    await controller.update('m1', {} as any);
+    expect(updateMission.execute).toHaveBeenCalledWith('m1', {});
 
-    await controller.transition(mockUser, 'm1', transitionDto);
-    expect(service.transition).toHaveBeenCalled();
+    await controller.transition('m1', { status: MissionStatus.PRE_FLIGHT_CHECK } as any);
+    expect(transitionMission.execute).toHaveBeenCalledWith('m1', { status: MissionStatus.PRE_FLIGHT_CHECK });
   });
 });

@@ -29,9 +29,9 @@ describe('ReportsController', () => {
 
   it('should delegate to service', async () => {
     await controller.getFleetHealthReport(mockUser);
-    expect(service.getFleetHealthReport).toHaveBeenCalledWith('user-1');
+    expect(service.getFleetHealthReport).toHaveBeenCalled();
 
     await controller.getOperationalAnalytics(mockUser);
-    expect(service.getOperationalAnalytics).toHaveBeenCalledWith('user-1');
+    expect(service.getOperationalAnalytics).toHaveBeenCalled();
   });
 });

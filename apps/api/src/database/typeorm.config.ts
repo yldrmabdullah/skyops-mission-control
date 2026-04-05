@@ -4,16 +4,18 @@ import {
   TypeOrmModuleAsyncOptions,
   TypeOrmModuleOptions,
 } from '@nestjs/typeorm';
+import { postgresSslForUrl } from './postgres-ssl';
 
 export function buildTypeOrmOptions(
   configService: ConfigService,
 ): TypeOrmModuleOptions {
-  const databaseUrl = configService.get<string>('DATABASE_URL');
+  const databaseUrl = configService.get<string>('DATABASE_URL')?.trim();
 
   if (databaseUrl) {
     return {
       type: 'postgres',
       url: databaseUrl,
+      ssl: postgresSslForUrl(databaseUrl),
       autoLoadEntities: false,
       synchronize: false,
       migrationsRun: true,

@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
@@ -8,15 +7,21 @@ import {
   MaintenanceType,
 } from './entities/maintenance-log.entity';
 import { MaintenanceService } from './maintenance.service';
+import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
+import { IMaintenanceLogsRepository } from './repositories/maintenance-logs.repository.interface';
+import { WorkspaceContext } from '../common/workspace-context/workspace-context';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
-  let dataSource: { transaction: jest.Mock };
-  let dronesRepository: { findOne: jest.Mock };
-  let maintenanceLogsRepository: { create: jest.Mock };
+  let dataSource: any;
 
   const ownerId = '11111111-1111-4111-8111-111111111111';
   const droneId = '22222222-2222-4222-8222-222222222222';
+
+  const mockWorkspaceContext = {
+    fleetOwnerId: ownerId,
+    userId: ownerId,
+  };
 
   beforeEach(async () => {
     const drone: Partial<Drone> = {
@@ -36,21 +41,9 @@ describe('MaintenanceService', () => {
           const manager = {
             save: jest.fn((entity: unknown) => Promise.resolve(entity)),
           };
-          return fn(manager);
+          return fn(manager as any);
         },
       ),
-    };
-
-    dronesRepository = {
-      findOne: jest.fn().mockResolvedValue(drone),
-    };
-
-    maintenanceLogsRepository = {
-      create: jest.fn((payload: unknown) => ({
-        ...(payload as object),
-        id: 'log-new',
-        droneId,
-      })),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -58,19 +51,27 @@ describe('MaintenanceService', () => {
         MaintenanceService,
         { provide: DataSource, useValue: dataSource },
         {
-          provide: getRepositoryToken(MaintenanceLog),
+          provide: IMaintenanceLogsRepository,
           useValue: {
-            ...maintenanceLogsRepository,
-            createQueryBuilder: jest.fn(),
+            create: jest.fn((payload: any) => ({ ...payload, id: 'log-1' })),
+            findAll: jest.fn().mockResolvedValue([[], 0]),
+            findOne: jest.fn(),
+            save: jest.fn(),
           },
         },
         {
-          provide: getRepositoryToken(Drone),
-          useValue: dronesRepository,
+          provide: IDronesRepository,
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(drone),
+          },
         },
         {
           provide: AuditService,
           useValue: { record: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: WorkspaceContext,
+          useValue: mockWorkspaceContext,
         },
       ],
     }).compile();
@@ -79,17 +80,13 @@ describe('MaintenanceService', () => {
   });
 
   it('persists drone and log in a single transaction on create', async () => {
-    await service.create(
-      {
-        droneId,
-        type: MaintenanceType.ROUTINE_CHECK,
-        technicianName: 'Tech',
-        performedAt: new Date().toISOString(),
-        flightHoursAtMaintenance: 40,
-      },
-      ownerId,
-      ownerId,
-    );
+    await service.create({
+      droneId,
+      type: MaintenanceType.ROUTINE_CHECK,
+      technicianName: 'Tech',
+      performedAt: new Date().toISOString(),
+      flightHoursAtMaintenance: 40,
+    });
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
   });

@@ -5,8 +5,6 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { JwtPayloadUser } from '../auth/strategies/jwt.strategy';
 import { ReportsService } from './reports.service';
 
 @ApiTags('Reports')
@@ -18,8 +16,8 @@ export class ReportsController {
   @Get('fleet-health')
   @ApiOperation({ summary: 'Fleet health summary' })
   @ApiResponse({ status: 200, description: 'Fleet health report' })
-  getFleetHealthReport(@CurrentUser() user: JwtPayloadUser) {
-    return this.reportsService.getFleetHealthReport(user.fleetOwnerId);
+  getFleetHealthReport() {
+    return this.reportsService.getFleetHealthReport();
   }
 
   @Get('operational-analytics')
@@ -28,7 +26,7 @@ export class ReportsController {
     status: 200,
     description: 'Mission, model, maintenance stats',
   })
-  getOperationalAnalytics(@CurrentUser() user: JwtPayloadUser) {
-    return this.reportsService.getOperationalAnalytics(user.fleetOwnerId);
+  getOperationalAnalytics() {
+    return this.reportsService.getOperationalAnalytics();
   }
 }
