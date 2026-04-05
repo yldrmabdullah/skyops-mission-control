@@ -27,8 +27,11 @@ RUN pnpm install --frozen-lockfile --prod --filter @skyops/api...
 
 COPY --from=builder /workspace/apps/api/dist ./apps/api/dist
 
+COPY apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
+RUN chmod +x ./apps/api/docker-entrypoint.sh
+
 WORKDIR /app/apps/api
 
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

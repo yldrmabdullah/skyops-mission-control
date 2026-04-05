@@ -7,8 +7,9 @@ import {
   MinLength,
 } from 'class-validator';
 
-export class RegisterDto {
-  @ApiProperty({ example: 'jane.pilot@skyops.io' })
+/** First workspace Manager only (when no users exist yet). */
+export class BootstrapRegisterDto {
+  @ApiProperty({ example: 'admin@skyops.io' })
   @IsEmail()
   @MaxLength(255)
   email: string;
@@ -25,7 +26,7 @@ export class RegisterDto {
   })
   password: string;
 
-  @ApiProperty({ example: 'Jane Pilot' })
+  @ApiProperty({ example: 'Alex Manager' })
   @IsString()
   @MinLength(2)
   @MaxLength(120)

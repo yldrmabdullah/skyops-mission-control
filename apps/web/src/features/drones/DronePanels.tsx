@@ -1,7 +1,8 @@
 import { format } from 'date-fns';
 import { EmptyState, SurfaceCard } from '../../components/SurfaceCard';
 import { StatusPill } from '../../components/StatusPill';
-import type { Drone } from '../../types/api';
+import { downloadMaintenanceAttachmentFile } from '../../lib/api';
+import type { Drone, MaintenanceAttachment } from '../../types/api';
 import { formatEnumLabel } from './drone-detail.utils';
 
 interface DroneSummaryPanelProps {
@@ -39,10 +40,13 @@ export function DroneSummaryPanel({ drone }: DroneSummaryPanelProps) {
 
 interface MaintenanceHistoryPanelProps {
   drone: Drone;
+  /** Shown when there are no rows (e.g. pilot workspace policy). */
+  emptyHint?: string;
 }
 
 export function MaintenanceHistoryPanel({
   drone,
+  emptyHint,
 }: MaintenanceHistoryPanelProps) {
   return (
     <SurfaceCard title="Maintenance history">
@@ -58,12 +62,48 @@ export function MaintenanceHistoryPanel({
                   {log.technicianName} ·{' '}
                   {format(new Date(log.performedAt), 'dd MMM yyyy')}
                 </div>
+                {log.attachments?.length ? (
+                  <ul className="maintenance-attachments">
+                    {log.attachments.map((att: MaintenanceAttachment, index) =>
+                      att.type === 'url' ? (
+                        <li key={`${log.id}-url-${index}`}>
+                          <a
+                            className="table-details-link"
+                            href={att.url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Link attachment
+                          </a>
+                        </li>
+                      ) : (
+                        <li key={`${log.id}-file-${att.storedFileName}`}>
+                          <button
+                            className="button ghost table-details-link"
+                            type="button"
+                            onClick={() =>
+                              void downloadMaintenanceAttachmentFile(
+                                log.id,
+                                att.storedFileName,
+                                att.originalName || att.storedFileName,
+                              )
+                            }
+                          >
+                            Download {att.originalName || 'file'}
+                          </button>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                ) : null}
               </div>
               <strong>{log.flightHoursAtMaintenance.toFixed(1)}h</strong>
             </div>
           ))
         ) : (
-          <EmptyState>No maintenance logs recorded yet.</EmptyState>
+          <EmptyState>
+            {emptyHint ?? 'No maintenance logs recorded yet.'}
+          </EmptyState>
         )}
       </div>
     </SurfaceCard>

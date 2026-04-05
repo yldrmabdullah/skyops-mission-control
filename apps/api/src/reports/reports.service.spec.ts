@@ -26,11 +26,17 @@ describe('ReportsService', () => {
 
     const missionsRepository = {
       count: jest.fn().mockResolvedValue(3),
+      createQueryBuilder: jest.fn(),
+    };
+
+    const maintenanceLogsRepository = {
+      createQueryBuilder: jest.fn(),
     };
 
     const service = new ReportsService(
       dronesRepository as unknown as Repository<Drone>,
       missionsRepository as unknown as Repository<Mission>,
+      maintenanceLogsRepository as never,
     );
 
     const report = await service.getFleetHealthReport('owner-1');
@@ -48,5 +54,58 @@ describe('ReportsService', () => {
     expect(report.overdueMaintenance).toHaveLength(1);
     expect(report.missionsInNext24Hours).toBe(3);
     expect(report.averageFlightHoursPerDrone).toBe(55);
+  });
+
+  it('returns operational analytics for the owner fleet', async () => {
+    const dronesRepository = {
+      find: jest.fn().mockResolvedValue([
+        { id: 'd1', model: 'MATRICE_300' },
+        { id: 'd2', model: 'MATRICE_300' },
+      ]),
+    };
+
+    const missionQb = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest
+        .fn()
+        .mockResolvedValue([{ status: 'PLANNED', cnt: '2' }]),
+    };
+
+    const maintQb = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getRawMany: jest
+        .fn()
+        .mockResolvedValue([{ technicianName: 'Alex', cnt: '3' }]),
+    };
+
+    const missionsRepository = {
+      createQueryBuilder: jest.fn(() => missionQb),
+    };
+
+    const maintenanceLogsRepository = {
+      createQueryBuilder: jest.fn(() => maintQb),
+    };
+
+    const service = new ReportsService(
+      dronesRepository as unknown as Repository<Drone>,
+      missionsRepository as unknown as Repository<Mission>,
+      maintenanceLogsRepository as never,
+    );
+
+    const analytics = await service.getOperationalAnalytics('owner-1');
+
+    expect(analytics.droneModelBreakdown).toEqual({ MATRICE_300: 2 });
+    expect(analytics.missionStatusBreakdown).toEqual({ PLANNED: 2 });
+    expect(analytics.maintenanceByTechnician).toEqual([
+      { technicianName: 'Alex', count: 3 },
+    ]);
   });
 });

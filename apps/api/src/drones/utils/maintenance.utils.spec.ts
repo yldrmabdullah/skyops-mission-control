@@ -4,6 +4,7 @@ import {
   calculateFlightHoursSinceMaintenance,
   calculateNextMaintenanceDueDate,
   isMaintenanceDue,
+  isMaintenanceWatchlistCandidate,
 } from './maintenance.utils';
 
 describe('maintenance utils', () => {
@@ -77,5 +78,39 @@ describe('maintenance utils', () => {
   it('keeps the serial number regex strict and uppercase', () => {
     expect(DRONE_SERIAL_NUMBER_REGEX.test('SKY-A1B2-C3D4')).toBe(true);
     expect(DRONE_SERIAL_NUMBER_REGEX.test('sky-a1b2-c3d4')).toBe(false);
+  });
+
+  it('watchlist when 50 flight hours since last maintenance', () => {
+    expect(
+      isMaintenanceWatchlistCandidate({
+        totalFlightHours: 60,
+        flightHoursAtLastMaintenance: 0,
+        nextMaintenanceDueDate: new Date('2099-01-01T00:00:00.000Z'),
+        referenceDate: new Date('2026-06-01T00:00:00.000Z'),
+      }),
+    ).toBe(true);
+  });
+
+  it('watchlist when next due date is within 7 days', () => {
+    const referenceDate = new Date('2026-06-01T12:00:00.000Z');
+    expect(
+      isMaintenanceWatchlistCandidate({
+        totalFlightHours: 10,
+        flightHoursAtLastMaintenance: 0,
+        nextMaintenanceDueDate: new Date('2026-06-05T12:00:00.000Z'),
+        referenceDate,
+      }),
+    ).toBe(true);
+  });
+
+  it('excludes drones that are neither hour-threshold nor within 7 days', () => {
+    expect(
+      isMaintenanceWatchlistCandidate({
+        totalFlightHours: 10,
+        flightHoursAtLastMaintenance: 0,
+        nextMaintenanceDueDate: new Date('2099-01-01T00:00:00.000Z'),
+        referenceDate: new Date('2026-06-01T00:00:00.000Z'),
+      }),
+    ).toBe(false);
   });
 });
