@@ -2,7 +2,7 @@
 
 NestJS REST API for SkyOps Mission Control: drones, missions, maintenance logs, fleet health reports, and JWT authentication.
 
-**Auth:** `GET /auth/status` (client hint), **`POST /auth/register`** (new **Manager** per unused email), **`POST /auth/login`**, profile/password/notification endpoints, **`GET /auth/team/members`** (workspace directory for any member), and **`POST /auth/team/members`** (Manager-only invites with one-time password). Fleet data is scoped to the Manager’s workspace (`fleetOwnerId`).
+**Auth:** All routes are under the global prefix **`/api`**. Examples: `GET /api/auth/status` (client hint), **`POST /api/auth/register`** (new **Manager** per unused email), **`POST /api/auth/login`**, profile/password/notification endpoints, **`GET /api/auth/team/members`** (workspace directory for any member), and **`POST /api/auth/team/members`** (Manager-only invites with one-time password). Fleet data is scoped to the Manager’s workspace (`fleetOwnerId`).
 
 **Docs:** Start from the monorepo [README.md](../../README.md). Production Swagger (when deployed): [https://skyops-mission-control-api.onrender.com/docs](https://skyops-mission-control-api.onrender.com/docs).
 
@@ -17,6 +17,7 @@ pnpm --filter @skyops/api dev          # watch mode
 pnpm --filter @skyops/api build
 pnpm --filter @skyops/api migration:run
 pnpm --filter @skyops/api seed
+pnpm --filter @skyops/api seed:demo-users   # only demo accounts; no fleet truncate
 pnpm --filter @skyops/api lint
 pnpm --filter @skyops/api exec jest --runInBand
 ```
