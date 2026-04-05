@@ -9,6 +9,9 @@ import {
   MissionListSortField,
   MissionListSortOrder,
 } from './dto/mission-list-sort.enum';
+import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CreateMissionDto } from './dto/create-mission.dto';
 import { MissionsService } from './missions.service';
 import { DomainException } from '../common/exceptions/domain.exception';
 import {
@@ -18,6 +21,16 @@ import {
 } from './exceptions/mission-specific.exceptions';
 
 const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+
+/** For testing private `assertNoOverlap` without `as any`. */
+interface MissionsServicePrivate {
+  assertNoOverlap(
+    droneId: string,
+    plannedStart: Date,
+    plannedEnd: Date,
+    options?: { excludeMissionId?: string; ownerIdForNotify?: string },
+  ): Promise<void>;
+}
 
 function createMissionRepositoryMock() {
   const queryBuilder = {
@@ -82,8 +95,8 @@ describe('MissionsService', () => {
       dataSource as unknown as DataSource,
       missionsRepository as unknown as Repository<Mission>,
       dronesRepository as unknown as Repository<Drone>,
-      auditService as any,
-      notificationsService as any,
+      auditService as unknown as AuditService,
+      notificationsService as unknown as NotificationsService,
     );
   });
 
@@ -621,9 +634,9 @@ describe('MissionsService', () => {
       missionsRepository.__queryBuilder.getOne.mockResolvedValue({
         id: 'overlap',
       });
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      const privateSvc = service as unknown as MissionsServicePrivate;
       await expect(
-        (service as any).assertNoOverlap('d1', new Date(), new Date()),
+        privateSvc.assertNoOverlap('d1', new Date(), new Date()),
       ).rejects.toThrow();
       expect(
         notificationsService.notifyScheduleConflictIfEnabled,
@@ -645,16 +658,16 @@ describe('MissionsService', () => {
       missionsRepository.save.mockResolvedValue(mission);
       auditService.record.mockRejectedValue(new Error('Audit Failed'));
 
-      const result = await service.create(
-        {
-          droneId: 'd1',
-          plannedStart: futureStart,
-          plannedEnd: futureEnd,
-          name: 'Test',
-        } as any,
-        OWNER_ID,
-        'u1',
-      );
+      const createDto: CreateMissionDto = {
+        droneId: 'd1',
+        plannedStart: futureStart,
+        plannedEnd: futureEnd,
+        name: 'Test',
+        type: MissionType.WIND_TURBINE_INSPECTION,
+        pilotName: 'Pilot',
+        siteLocation: 'Site',
+      };
+      const result = await service.create(createDto, OWNER_ID, 'u1');
       expect(result).toBeDefined();
     });
 

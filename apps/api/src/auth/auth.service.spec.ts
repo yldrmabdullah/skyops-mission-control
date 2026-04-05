@@ -50,7 +50,7 @@ describe('AuthService', () => {
 
   it('registerManager creates a new Manager', async () => {
     usersRepository.findOne.mockResolvedValue(null);
-    usersRepository.save.mockImplementation(async (u) => u as User);
+    usersRepository.save.mockImplementation((u) => Promise.resolve(u as User));
 
     await service.registerManager({
       email: 'mgr@example.com',
@@ -83,11 +83,13 @@ describe('AuthService', () => {
         workspaceOwnerId: null,
       } as User)
       .mockResolvedValueOnce(null);
-    usersRepository.save.mockImplementation(async (u) => ({
-      ...(u as User),
-      id: 'pilot-1',
-      createdAt: new Date(),
-    }));
+    usersRepository.save.mockImplementation((u) =>
+      Promise.resolve({
+        ...(u as User),
+        id: 'pilot-1',
+        createdAt: new Date(),
+      }),
+    );
 
     const result = await service.createTeamMember('mgr-1', {
       email: 'p@example.com',
