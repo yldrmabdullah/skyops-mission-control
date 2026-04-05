@@ -3,12 +3,13 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  Scope,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import type { JwtPayloadUser } from '../../auth/strategies/jwt.strategy';
 import { WorkspaceContext } from './workspace-context';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class WorkspaceContextInterceptor implements NestInterceptor {
   constructor(private readonly workspaceContext: WorkspaceContext) {}
 

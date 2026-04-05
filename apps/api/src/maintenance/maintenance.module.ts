@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
-import { Drone } from '../drones/entities/drone.entity';
+import { DronePersistenceModule } from '../drones/drone-persistence.module';
 import { WorkspaceContextModule } from '../common/workspace-context/workspace-context.module';
 import { MaintenanceLog } from './entities/maintenance-log.entity';
 import { MaintenanceController } from './maintenance.controller';
@@ -11,7 +11,8 @@ import { TypeOrmMaintenanceLogsRepository } from './repositories/typeorm-mainten
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MaintenanceLog, Drone]),
+    DronePersistenceModule,
+    TypeOrmModule.forFeature([MaintenanceLog]),
     AuditModule,
     WorkspaceContextModule,
   ],
