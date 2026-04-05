@@ -1,6 +1,10 @@
-import { BadRequestException } from '@nestjs/common';
 import { MissionStatus } from '../entities/mission.entity';
-import { assertValidMissionTransition } from './mission-transition.utils';
+import { InvalidMissionTransitionException } from '../exceptions/mission-specific.exceptions';
+import {
+  assertValidMissionTransition,
+  canTransitionMission,
+  MissionStateMachine,
+} from './mission-transition.utils';
 
 describe('assertValidMissionTransition', () => {
   it('allows valid mission transitions', () => {
@@ -25,6 +29,43 @@ describe('assertValidMissionTransition', () => {
         MissionStatus.PLANNED,
         MissionStatus.COMPLETED,
       ),
-    ).toThrow(BadRequestException);
+    ).toThrow(InvalidMissionTransitionException);
+  });
+});
+
+describe('canTransitionMission', () => {
+  it('returns true for allowed edges', () => {
+    expect(
+      canTransitionMission(
+        MissionStatus.PLANNED,
+        MissionStatus.PRE_FLIGHT_CHECK,
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for disallowed edges', () => {
+    expect(
+      canTransitionMission(MissionStatus.PLANNED, MissionStatus.COMPLETED),
+    ).toBe(false);
+  });
+});
+
+describe('MissionStateMachine', () => {
+  it('delegates assertTransition to assertValidMissionTransition', () => {
+    expect(() =>
+      MissionStateMachine.assertTransition(
+        MissionStatus.PLANNED,
+        MissionStatus.COMPLETED,
+      ),
+    ).toThrow(InvalidMissionTransitionException);
+  });
+
+  it('exposes canTransition', () => {
+    expect(
+      MissionStateMachine.canTransition(
+        MissionStatus.IN_PROGRESS,
+        MissionStatus.COMPLETED,
+      ),
+    ).toBe(true);
   });
 });

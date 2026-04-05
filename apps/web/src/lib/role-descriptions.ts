@@ -7,7 +7,8 @@ const ROLE_LABEL: Record<OperatorRole, string> = {
   MANAGER: 'Manager',
 };
 
-export function roleTitle(role: OperatorRole): string {
+export function roleTitle(role: OperatorRole | undefined): string {
+  if (role === undefined) return '';
   return ROLE_LABEL[role] ?? formatEnumLabel(role);
 }
 

@@ -7,10 +7,13 @@ import {
   In,
   LessThanOrEqual,
   MoreThanOrEqual,
-  Not,
   Repository,
 } from 'typeorm';
-import { Mission, MissionStatus } from '../entities/mission.entity';
+import {
+  Mission,
+  ACTIVE_SCHEDULING_MISSION_STATUSES,
+} from '../entities/mission.entity';
+import { overlapActiveMissionWhere } from '../utils/mission-overlap.where';
 import {
   IMissionsRepository,
   MissionListQueryOptions,
@@ -36,16 +39,9 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
     end: Date,
     excludeId?: string,
   ): Promise<Mission | null> {
-    const base: FindOptionsWhere<Mission> = {
-      droneId,
-      plannedStart: LessThanOrEqual(end),
-      plannedEnd: MoreThanOrEqual(start),
-    };
-    const where: FindOptionsWhere<Mission> = excludeId
-      ? { ...base, id: Not(excludeId) }
-      : base;
-
-    return this.repository.findOne({ where });
+    return this.repository.findOne({
+      where: overlapActiveMissionWhere(droneId, start, end, excludeId),
+    });
   }
 
   async findAll(
@@ -89,7 +85,7 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
   }
 
   create(props: DeepPartial<Mission>): Mission {
-    return this.repository.create(props) as unknown as Mission;
+    return this.repository.create(props);
   }
 
   async countByDroneId(droneId: string): Promise<number> {
@@ -100,11 +96,7 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
     return this.repository.findOne({
       where: {
         droneId,
-        status: In([
-          MissionStatus.PLANNED,
-          MissionStatus.PRE_FLIGHT_CHECK,
-          MissionStatus.IN_PROGRESS,
-        ]),
+        status: In(ACTIVE_SCHEDULING_MISSION_STATUSES),
       },
       order: { plannedStart: 'ASC' },
     });

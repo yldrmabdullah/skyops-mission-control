@@ -19,45 +19,58 @@ test('creates a drone, schedules a mission, transitions it, and reflects the fle
   await page.getByLabel('Hours at last maintenance').fill('0');
   await page.getByTestId('create-drone-submit').click();
 
-  await expect(page.getByText('Drone registered successfully.')).toBeVisible();
+  await expect(
+    page.getByText(/registered successfully/i),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: uniqueSerial })).toBeVisible();
 
   await page.goto('/missions');
 
   await page.getByTestId('mission-name-input').fill(missionName);
-  const droneOptionValue = await page
-    .getByTestId('mission-drone-select')
-    .locator(`option:has-text("${uniqueSerial}")`)
-    .getAttribute('value');
-
-  expect(droneOptionValue).toBeTruthy();
-
+  await page.getByTestId('mission-drone-select').click();
   await page
-    .getByTestId('mission-drone-select')
-    .selectOption(droneOptionValue as string);
+    .getByRole('option', { name: new RegExp(uniqueSerial) })
+    .click();
   await page.getByLabel('Pilot name').fill('E2E Pilot');
   await page.getByLabel('Site location').fill('Hamburg, Germany');
-  await page.getByTestId('create-mission-submit').click();
 
-  await expect(page.getByText('Mission scheduled successfully.')).toBeVisible();
+  const createMissionResponse = page.waitForResponse((res) => {
+    if (res.request().method() !== 'POST') return false;
+    try {
+      const { pathname } = new URL(res.url());
+      return pathname.endsWith('/missions');
+    } catch {
+      return false;
+    }
+  });
+  await page.getByTestId('create-mission-submit').click();
+  const created = await createMissionResponse;
+  expect(
+    created.status(),
+    `POST /missions failed: ${await created.text()}`,
+  ).toBe(201);
+
+  await expect(
+    page.getByText('Mission Scheduled', { exact: false }).first(),
+  ).toBeVisible();
   await page.getByRole('cell', { name: missionName }).click();
 
   await page.getByTestId('mission-transition-submit').click();
   await expect(
-    page.getByText('Mission status updated successfully.'),
+    page.getByText(/successfully transitioned/i).first(),
   ).toBeVisible();
 
   await page.getByRole('cell', { name: missionName }).click();
   await page.getByTestId('mission-transition-submit').click();
   await expect(
-    page.getByText('Mission status updated successfully.'),
+    page.getByText(/successfully transitioned/i).first(),
   ).toBeVisible();
 
   await page.getByRole('cell', { name: missionName }).click();
   await page.getByLabel('Flight hours logged').fill('2');
   await page.getByTestId('mission-transition-submit').click();
   await expect(
-    page.getByText('Mission status updated successfully.'),
+    page.getByText(/successfully transitioned/i).first(),
   ).toBeVisible();
 
   await page.goto('/dashboard');

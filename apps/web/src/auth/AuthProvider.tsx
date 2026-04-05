@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setStatus('anonymous');
     queryClient.clear();
-    navigate('/sign-in', { replace: true });
+    void navigate('/sign-in', { replace: true });
   }, [navigate]);
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setStatus('anonymous');
       queryClient.clear();
-      navigate('/sign-in', {
+      void navigate('/sign-in', {
         replace: true,
         state: { sessionExpired: true },
       });

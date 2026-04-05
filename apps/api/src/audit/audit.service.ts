@@ -45,7 +45,7 @@ export class AuditService {
 
   /**
    * Pilots and technicians see only events they authored.
-   * Managers additionally see any event tied to drones they own (fleet-scoped trail).
+   * Managers additionally see every audit event tied to drones they own (fleet-scoped trail).
    */
   async findVisibleToUser(
     user: JwtPayloadUser,

@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { IMissionsRepository } from '../repositories/missions.repository.interface';
 import { WorkspaceContext } from '../../common/workspace-context/workspace-context';
+import { MissionNotFoundException } from '../exceptions/mission-specific.exceptions';
 
 @Injectable()
 export class GetMissionUseCase {
@@ -14,7 +15,7 @@ export class GetMissionUseCase {
 
     const mission = await this.missionsRepository.findOne(id, fleetOwnerId);
     if (!mission) {
-      throw new NotFoundException(`Mission ${id} was not found.`);
+      throw new MissionNotFoundException(id);
     }
 
     return mission;

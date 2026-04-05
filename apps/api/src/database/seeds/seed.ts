@@ -16,6 +16,7 @@ import {
   MaintenanceType,
 } from '../../maintenance/entities/maintenance-log.entity';
 import {
+  ACTIVE_SCHEDULING_MISSION_STATUSES,
   Mission,
   MissionStatus,
   MissionType,
@@ -26,6 +27,42 @@ import type { Repository } from 'typeorm';
 const droneModels = Object.values(DroneModel);
 const missionTypes = Object.values(MissionType);
 const maintenanceTypes = Object.values(MaintenanceType);
+
+function intervalsOverlap(
+  aStart: Date,
+  aEnd: Date,
+  bStart: Date,
+  bEnd: Date,
+): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/** Keeps seed data valid when DB enforces non-overlapping active mission windows per drone. */
+function clashesActiveSchedulingWindow(
+  existing: Pick<
+    Mission,
+    'droneId' | 'plannedStart' | 'plannedEnd' | 'status'
+  >[],
+  candidate: Pick<
+    Mission,
+    'droneId' | 'plannedStart' | 'plannedEnd' | 'status'
+  >,
+): boolean {
+  if (!ACTIVE_SCHEDULING_MISSION_STATUSES.includes(candidate.status)) {
+    return false;
+  }
+  return existing.some(
+    (m) =>
+      ACTIVE_SCHEDULING_MISSION_STATUSES.includes(m.status) &&
+      m.droneId === candidate.droneId &&
+      intervalsOverlap(
+        m.plannedStart,
+        m.plannedEnd,
+        candidate.plannedStart,
+        candidate.plannedEnd,
+      ),
+  );
+}
 
 const DEMO_PASSWORD = 'SkyOpsDemo1';
 const DEMO_MANAGER_EMAIL = 'ops@skyops.demo';
@@ -277,36 +314,47 @@ export async function runSeed() {
   ];
 
   for (let index = 0; index < 47; index += 1) {
-    const status = faker.helpers.arrayElement(bulkStatuses);
-    const dronePool =
-      status === MissionStatus.PLANNED ||
-      status === MissionStatus.PRE_FLIGHT_CHECK
-        ? availableDrones.length > 0
-          ? availableDrones
-          : savedDrones
-        : savedDrones;
-    const drone = faker.helpers.arrayElement(dronePool);
+    let created: Mission | null = null;
+    for (let attempt = 0; attempt < 80 && !created; attempt += 1) {
+      const status = faker.helpers.arrayElement(bulkStatuses);
+      const dronePool =
+        status === MissionStatus.PLANNED ||
+        status === MissionStatus.PRE_FLIGHT_CHECK
+          ? availableDrones.length > 0
+            ? availableDrones
+            : savedDrones
+          : savedDrones;
+      const drone = faker.helpers.arrayElement(dronePool);
 
-    const startOffsetDays =
-      status === MissionStatus.PLANNED ||
-      status === MissionStatus.PRE_FLIGHT_CHECK
-        ? faker.number.int({ min: 1, max: 14 })
-        : faker.number.int({ min: -20, max: -1 });
+      const startOffsetDays =
+        status === MissionStatus.PLANNED ||
+        status === MissionStatus.PRE_FLIGHT_CHECK
+          ? faker.number.int({ min: 1, max: 14 })
+          : faker.number.int({ min: -20, max: -1 });
 
-    const plannedStart = faker.date.soon({
-      days: Math.abs(startOffsetDays),
-      refDate:
-        startOffsetDays >= 0
-          ? new Date()
-          : new Date(Date.now() + startOffsetDays * 24 * 60 * 60 * 1000),
-    });
-    const plannedEnd = new Date(plannedStart);
-    plannedEnd.setUTCHours(
-      plannedEnd.getUTCHours() + faker.number.int({ min: 1, max: 4 }),
-    );
+      const plannedStart = faker.date.soon({
+        days: Math.abs(startOffsetDays),
+        refDate:
+          startOffsetDays >= 0
+            ? new Date()
+            : new Date(Date.now() + startOffsetDays * 24 * 60 * 60 * 1000),
+      });
+      const plannedEnd = new Date(plannedStart);
+      plannedEnd.setUTCHours(
+        plannedEnd.getUTCHours() + faker.number.int({ min: 1, max: 4 }),
+      );
 
-    missions.push(
-      missionRepository.create({
+      const candidate = {
+        droneId: drone.id,
+        plannedStart,
+        plannedEnd,
+        status,
+      };
+      if (clashesActiveSchedulingWindow(missions, candidate)) {
+        continue;
+      }
+
+      created = missionRepository.create({
         name: `${faker.company.name()} ${faker.helpers.arrayElement(['Inspection', 'Survey', 'Patrol'])}`,
         type: faker.helpers.arrayElement(missionTypes),
         droneId: drone.id,
@@ -335,8 +383,14 @@ export async function runSeed() {
                 'Flight zone restriction triggered.',
               ])
             : null,
-      }),
-    );
+      });
+    }
+    if (!created) {
+      throw new Error(
+        'Seed could not place a non-overlapping mission after many attempts; adjust faker ranges or counts.',
+      );
+    }
+    missions.push(created);
   }
 
   const savedMissions = await missionRepository.save(missions);

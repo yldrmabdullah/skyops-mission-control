@@ -1,16 +1,26 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/use-auth';
-import { AuthBrandStory } from '../components/AuthBrandStory';
 import { AuthShell } from '../components/AuthShell';
-import { FormNotice } from '../components/FormNotice';
-import { RoleAccessGuide } from '../components/RoleAccessGuide';
 import { getErrorMessage } from '../lib/api';
 import {
   demoManagerEmail,
   demoManagerPassword,
   demoWorkspaceHintEnabled,
 } from '../lib/demo-workspace';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Alert, AlertDescription } from '../components/ui/alert';
+import { 
+  Eye, 
+  EyeOff, 
+  LogIn, 
+  AlertCircle, 
+  HelpCircle,
+  ShieldCheck,
+  ChevronRight
+} from 'lucide-react';
 
 export function SignInPage() {
   const { signIn, status, user } = useAuth();
@@ -42,12 +52,12 @@ export function SignInPage() {
       return;
     }
     if (user.mustChangePassword) {
-      navigate('/account/change-password', {
+      void navigate('/account/change-password', {
         replace: true,
         state: { from: { pathname: from } },
       });
     } else {
-      navigate(from, { replace: true });
+      void navigate(from, { replace: true });
     }
   }, [status, user, from, navigate]);
 
@@ -59,12 +69,12 @@ export function SignInPage() {
     try {
       const signedIn = await signIn(email.trim(), password);
       if (signedIn.mustChangePassword) {
-        navigate('/account/change-password', {
+        void navigate('/account/change-password', {
           replace: true,
           state: { from: { pathname: from } },
         });
       } else {
-        navigate(from, { replace: true });
+        void navigate(from, { replace: true });
       }
     } catch (error) {
       const detail = getErrorMessage(error);
@@ -79,10 +89,10 @@ export function SignInPage() {
 
   if (status === 'loading') {
     return (
-      <div className="auth-boot">
-        <div className="auth-boot-inner">
-          <div className="auth-boot-mark">SkyOps</div>
-          <p className="muted">Loading…</p>
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground animate-pulse">Initializing SkyOps Terminal…</p>
         </div>
       </div>
     );
@@ -90,122 +100,131 @@ export function SignInPage() {
 
   return (
     <AuthShell
-      brandContent={
-        <div className="auth-shell-brand-stack">
-          <AuthBrandStory />
-          <RoleAccessGuide lead="Managers run the workspace and invite Pilots and Technicians from Settings. Pilots and Technicians sign in with the email and one-time password their Manager shared." />
+      subtitle="Authorized personnel access for drone fleet operations and mission command."
+      title="Terminal Access"
+      footer={
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            New operator?{' '}
+            <Link className="text-primary font-bold hover:underline" to="/sign-up">
+              Register Workspace
+            </Link>
+          </p>
+          <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+            <ShieldCheck size={10} />
+            Secure Authentication Protocol
+          </div>
         </div>
       }
-      footer={
-        <p className="muted auth-switch">
-          Don't have an account?{' '}
-          <Link className="auth-inline-link" to="/sign-up">
-            Sign up
-          </Link>
-        </p>
-      }
-      subtitle="Securely manage your drone fleet operations and compliance trail."
-      title="Welcome back"
     >
-      {sessionExpired ? (
-        <FormNotice
-          message="Your session expired. Please sign in again to continue."
-          tone="warning"
-        />
-      ) : null}
+      {sessionExpired && (
+        <Alert className="bg-amber-500/10 border-amber-500/20 text-amber-600 mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="font-medium text-xs">
+            Your session expired. Please re-authenticate.
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {formError ? <FormNotice message={formError} tone="error" /> : null}
+      {formError && (
+        <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="font-medium text-xs">
+            {formError}
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {demoWorkspaceHintEnabled ? (
-        <details className="signup-local-reset demo-workspace-hint">
-          <summary className="signup-local-reset-summary">
-            Try the seeded demo workspace
-          </summary>
-          <div className="signup-local-reset-body">
-            <p>
-              After <code>pnpm --filter @skyops/api seed</code>, sign in as the
-              demo <strong>Manager</strong> (full fleet, team, notifications,
-              audit):
-            </p>
-            <p className="demo-workspace-credentials muted">
-              <strong>{demoManagerEmail}</strong>
-              <span aria-hidden="true"> · </span>
-              <strong>{demoManagerPassword}</strong>
-            </p>
-            <button
-              className="button secondary demo-workspace-fill"
-              type="button"
-              onClick={() => {
-                setEmail(demoManagerEmail);
-                setPassword(demoManagerPassword);
-              }}
-            >
-              Fill Manager credentials
-            </button>
-            <p className="muted demo-workspace-more">
-              See README for <strong>pilot@skyops.demo</strong> and{' '}
-              <strong>tech@skyops.demo</strong> (same password; Pilot must set a
-              new password on first sign-in).
-            </p>
+      {demoWorkspaceHintEnabled && (
+        <div className="mb-6 p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-3">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-primary/60">
+            <span>Demo Mode</span>
+            <HelpCircle size={12} />
           </div>
-        </details>
-      ) : null}
+          <div className="space-y-1">
+            <p className="text-[11px] text-muted-foreground font-medium">Use seeded manager credentials:</p>
+            <code className="block text-[10px] bg-background/50 p-2 rounded border border-primary/5 font-mono truncate">
+              {demoManagerEmail} / {demoManagerPassword}
+            </code>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full text-[10px] h-8 glass"
+            onClick={() => {
+              setEmail(demoManagerEmail);
+              setPassword(demoManagerPassword);
+            }}
+          >
+            Fill Demo Credentials
+          </Button>
+        </div>
+      )}
 
-      <form className="auth-form" onSubmit={onSubmit}>
-        <label className="field">
-          <span className="field-label">Work email</span>
-          <input
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <div className="space-y-2">
+          <Label htmlFor="email">Operator Email</Label>
+          <Input
+            id="email"
+            data-testid="signin-email-input"
             required
             autoComplete="email"
-            className="input"
-            data-testid="signin-email-input"
-            inputMode="email"
-            placeholder="you@skyops.io"
+            placeholder="pilot@skyops.io"
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            className="glass"
           />
-        </label>
+        </div>
 
-        <label className="field">
-          <span className="field-label">Password</span>
-          <div className="password-field">
-            <input
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Security Code / Password</Label>
+          </div>
+          <div className="relative group">
+            <Input
+              id="password"
+              data-testid="signin-password-input"
               required
               autoComplete="current-password"
-              className="input password-field-input"
-              data-testid="signin-password-input"
               placeholder="••••••••"
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              className="glass pr-10"
             />
-            <button
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              aria-pressed={showPassword}
-              className="button ghost password-toggle"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 h-full px-3 hover:bg-transparent text-muted-foreground hover:text-primary transition-colors"
               type="button"
               onClick={() => setShowPassword((current) => !current)}
             >
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </Button>
           </div>
-        </label>
+        </div>
 
-        <p className="field-hint">
-          Forgot your password? Ask your workspace Manager — automated password
-          reset is not enabled in this environment.
-        </p>
-
-        <div className="form-actions auth-form-actions">
-          <button
-            className="button auth-submit"
+        <div className="pt-2">
+          <Button
             data-testid="signin-submit"
-            disabled={submitting}
+            className="w-full h-11 text-base font-bold shadow-lg hover:shadow-primary/20 transition-all gap-2"
             type="submit"
+            disabled={submitting}
           >
-            {submitting ? 'Signing in…' : 'Sign in'}
-          </button>
+            {submitting ? (
+              <span className="flex items-center gap-2">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Authenticating...
+              </span>
+            ) : (
+              <>
+                <LogIn size={18} />
+                Sign In to Command Center
+                <ChevronRight size={18} />
+              </>
+            )}
+          </Button>
         </div>
       </form>
     </AuthShell>

@@ -4,6 +4,8 @@ Internal **operations console** for a commercial drone fleet: **registry**, **in
 
 Built as a **TypeScript monorepo**: NestJS REST API, React (Vite) SPA, PostgreSQL via TypeORM migrations, Swagger, Jest + Playwright, Docker Compose, GitHub Actions, and **Render** Blueprints (`dev` for integration, `master` for production deploys).
 
+**Repository standards:** root **`pnpm typecheck`** and **`pnpm knip`**, an OpenAPI contract at **`contracts/openapi.json`** with generated web types, and CI that enforces typings drift—see [CI](#ci) and [OpenAPI contract](#openapi-contract).
+
 ## Live environment (Render)
 
 | Resource              | URL                                                                                                              |
@@ -21,6 +23,7 @@ On Render’s free web tier the API **sleeps after idle time**; the first reques
 | **This README**                          | Full product + stack summary, local/Docker run, tests, CI, deploy overview    | Onboarding, running the project, understanding what shipped                |
 | [docs/BRANCHING.md](docs/BRANCHING.md)   | `dev` vs `master`, `feature/*` / `fix/*` / `chore/*`, release & Render wiring | Creating branches, PRs, merging to prod                                    |
 | [docs/RENDER.md](docs/RENDER.md)         | Env vars (`DATABASE_URL`, `VITE_API_BASE_URL`), Blueprint quirks, checklists  | Deploying or debugging Render (URLs, rebuild static site after API rename) |
+| [docs/HTTP_SEMANTICS.md](docs/HTTP_SEMANTICS.md) | HTTP status semantics, domain error codes, exclusion constraint → 409 | API changes, SPA error handling, contract review |
 | [apps/api/README.md](apps/api/README.md) | API-only pnpm commands                                                        | Working inside `apps/api`                                                  |
 | [apps/web/README.md](apps/web/README.md) | Web-only pnpm commands                                                        | Working inside `apps/web`                                                  |
 
@@ -40,11 +43,12 @@ On Render’s free web tier the API **sleeps after idle time**; the first reques
 - [Docker](#docker-full-stack)
 - [Environment variables](#environment-variables-summary)
 - [Testing](#testing)
+- [OpenAPI contract](#openapi-contract)
 - [API surface](#api-surface)
 - [CI](#ci)
 - [Deployment (Render)](#free-deployment-render)
 - [Walkthrough](#walkthrough)
-- [Trade-offs and next steps](#trade-offs-and-next-steps)
+- [Future work](#future-work)
 
 ## What the application contains
 
@@ -74,14 +78,14 @@ Domain modules (each with entities, DTOs, controllers, services):
 | Module        | Responsibility                                                                                                                                        |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `auth`        | Bootstrap first Manager, login, profile/password, notification prefs, **team** CRUD (invites); bcrypt; JWT; workspace-scoped fleet via `fleetOwnerId` |
-| `drones`      | CRUD, serial validation, status rules, retirement guards, maintenance field calculations                                                              |
-| `missions`    | Scheduling, overlap checks, state machine, completion updates flight hours and maintenance                                                            |
+| `drones`      | CRUD, serial validation, status rules, retirement guards, maintenance field calculations; **nightly job** sets `MAINTENANCE` on **AVAILABLE** drones when the 50h/90d rule is due (no mission activity required) |
+| `missions`    | Scheduling inside a **DB transaction** with **pessimistic lock** on the drone row; **active-only** overlap (`PLANNED` / `PRE_FLIGHT_CHECK` / `IN_PROGRESS`); centralized transition graph (`MissionStateMachine` in `mission-transition.utils.ts`); completion updates flight hours and maintenance |
 | `maintenance` | Maintenance log CRUD; recalculates drone maintenance fields                                                                                           |
-| `reports`     | Fleet health and operational analytics aggregates                                                                                                    |
+| `reports`     | Fleet health via **SQL aggregation** (TypeORM `QueryBuilder`, no per-drone mission count fan-out); operational analytics                                                                                                    |
 | `notifications` | In-app notifications (schedule conflicts, maintenance due, etc.) for workspace members                                                          |
 | `audit`       | Immutable-style **audit events** for key actions; list API powers the **Audit log** UI                                                                 |
 
-Cross-cutting: global `ValidationPipe`, HTTP exception filter, TypeORM migrations (no `synchronize` in production paths), `/api/health` for probes.
+Cross-cutting: global `ValidationPipe`, HTTP exception filter, TypeORM migrations (no `synchronize` in production paths), `/api/health` for probes, **`ScheduleModule`** for time-based jobs (see below).
 
 ### Data model (conceptual)
 
@@ -90,7 +94,7 @@ Cross-cutting: global `ValidationPipe`, HTTP exception filter, TypeORM migration
 - **Mission** — type, schedule, pilot, site, status lifecycle, optional abort reason, logged flight hours on completion.
 - **MaintenanceLog** — linked drone, technician, notes, flight hours snapshot, maintenance type.
 
-Business rules (50 flight hours **or** 90 days for maintenance due, overlap rules, retirement with active missions, etc.) are implemented in services and helpers such as `maintenance.utils` and drone rule helpers.
+Business rules (50 flight hours **or** 90 days for maintenance due, overlap rules, retirement with active missions, etc.) are implemented in **use-cases**, **services**, and helpers such as [`maintenance.utils.ts`](apps/api/src/drones/utils/maintenance.utils.ts), [`mission-transition.utils.ts`](apps/api/src/missions/utils/mission-transition.utils.ts), and [`mission-overlap.where.ts`](apps/api/src/missions/utils/mission-overlap.where.ts). Drone entity maintenance helpers delegate to `maintenance.utils` to avoid drift.
 
 ## Tech stack
 
@@ -98,10 +102,10 @@ Business rules (50 flight hours **or** 90 days for maintenance due, overlap rule
 | --------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Runtime         | Node.js **≥ 22**                                                                                                  |
 | Package manager | **pnpm** 10.x workspaces                                                                                          |
-| Backend         | **NestJS**, **TypeORM**, **PostgreSQL**, **Swagger** (`/docs`), **Passport JWT**, **bcrypt**, **class-validator** |
+| Backend         | **NestJS**, **TypeORM**, **PostgreSQL**, **Swagger** (`/docs`), **Passport JWT**, **bcrypt**, **class-validator**, **`@nestjs/schedule`** (nightly maintenance reconciliation) |
 | Frontend        | **React**, **Vite**, **TypeScript**, **React Router**, **TanStack React Query**                                   |
 | Testing         | **Jest** (API unit/integration), **Playwright** (web e2e against preview + scripted API)                          |
-| Tooling         | **ESLint**, **Prettier**, **Husky** / lint-staged, **Docker**, **GitHub Actions**                                 |
+| Tooling         | **ESLint**, **Prettier**, **Knip**, **openapi-typescript**, **Husky** / lint-staged, **Docker**, **GitHub Actions** |
 
 Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 
@@ -110,11 +114,13 @@ Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 - Full drone registry flow with create, read, update, and delete safeguards
 - Mission scheduling, mission reassignment, and lifecycle transition controls
 - Maintenance logging with automatic due-date recalculation (calendar and flight-hour thresholds)
-- Fleet health report with overdue maintenance and next-24-hour mission visibility
+- Fleet health report: SQL-backed aggregates, overdue maintenance list, and **missions starting in the next 24 hours** (active statuses only)
+- Nightly **maintenance-due** reconciliation for idle `AVAILABLE` drones (`@nestjs/schedule`; skipped when `NODE_ENV=test`)
 - JWT authentication; fleet data scoped per **workspace** (Manager fleet)
 - Workspace bootstrap, Manager-led invites, and forced password change after one-time credentials
 - API input validation, structured error responses, pagination, filters, and migrations
 - Jest unit/integration coverage plus a Playwright black-box user flow
+- OpenAPI contract in-repo with generated web types; CI blocks drift between `contracts/openapi.json` and `openapi.d.ts`
 - Docker and Render deployment support
 
 ## Repository structure
@@ -124,7 +130,9 @@ Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 ├── apps
 │   ├── api     # NestJS REST API (@skyops/api)
 │   └── web     # React dashboard (@skyops/web)
-├── docs            # BRANCHING.md, RENDER.md
+├── contracts       # OpenAPI JSON (source of truth for web `types:openapi`; CI checks drift)
+├── docs            # BRANCHING.md, RENDER.md, HTTP_SEMANTICS.md
+├── knip.json       # Root Knip config (unused files / deps; runs in CI)
 ├── scripts         # Local / CI helpers (e.g. e2e API + web startup)
 ├── render.yaml     # Production Blueprint (branch: master)
 ├── render.dev.yaml # Staging Blueprint (branch: dev)
@@ -153,7 +161,8 @@ Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 
 - Mission creation with drone availability enforcement
 - Mission list filtering by status, drone, and date range
-- Overlap prevention for the same drone among **active** schedules (`PLANNED`, `PRE_FLIGHT_CHECK`, `IN_PROGRESS`)
+- Overlap prevention for the same drone among **active** schedules (`PLANNED`, `PRE_FLIGHT_CHECK`, `IN_PROGRESS`); terminal missions do not block new windows
+- Concurrent scheduling: overlap check and insert/update run under a **transaction** with a **row lock** on the drone to reduce double-booking races (Postgres default isolation is still `READ COMMITTED`; locking serializes per drone)
 - Planned mission editing and reassignment support
 - Lifecycle enforcement:
   - `PLANNED -> PRE_FLIGHT_CHECK -> IN_PROGRESS -> COMPLETED`
@@ -276,6 +285,8 @@ Build and run API, web, and PostgreSQL:
 docker compose up --build
 ```
 
+Use the **repository root** (the folder that contains `docker-compose.yml`). In zsh, parent directory is `cd ..` with a space — `cd..` is not a valid command.
+
 | Service    | Host port | Notes                                                                           |
 | ---------- | --------- | ------------------------------------------------------------------------------- |
 | PostgreSQL | 5432      | DB `skyops`, user/password `postgres`                                           |
@@ -285,6 +296,8 @@ docker compose up --build
 The API image uses **`docker-entrypoint.sh`**: on each container start it runs **TypeORM migrations**, then runs the **demo seed** only when the **`users` table is empty** (typical first `docker compose up` with a new Postgres volume). After that, data persists across restarts. To **re-seed** without wiping the volume, set **`DOCKER_FORCE_SEED=1`** on the `api` service (this re-runs the seed script and clears fleet / notification / audit tables as documented in **Seed data**). To **disable** automatic seeding entirely, set **`DOCKER_SKIP_SEED=1`**.
 
 Point the browser at the web URL above. Nginx proxies `/api/` to the `api` service. For custom image builds, set `VITE_API_BASE_URL=/api` (or your public API URL) when building the web image so the SPA matches the proxy.
+
+If the **API container exits during migrations** on a **reused** Postgres volume (old rows conflicting with a new DB constraint), run `docker compose down -v` and `docker compose up --build` once to reset volumes, or pull the latest migration fixes and rebuild the API image so existing overlaps are repaired before the constraint is applied.
 
 ## Environment variables (summary)
 
@@ -301,11 +314,15 @@ Point the browser at the web URL above. Nginx proxies `/api/` to the `api` servi
 
 ## Useful monorepo commands
 
-| Goal                                       | Command         |
-| ------------------------------------------ | --------------- |
-| Dev (API + web)                            | `pnpm dev`      |
-| Lint all packages                          | `pnpm lint`     |
-| Build all                                  | `pnpm build`    |
+| Goal | Command |
+| ---- | ------- |
+| Dev (API + web) | `pnpm dev` |
+| Lint all packages | `pnpm lint` |
+| Typecheck (API + web, no emit) | `pnpm typecheck` |
+| Knip (unused files / dependencies) | `pnpm knip` |
+| Build all | `pnpm build` |
+| Export OpenAPI JSON to `contracts/` (needs DB) | `pnpm --filter @skyops/api openapi:export` |
+| Regenerate web types from `contracts/openapi.json` | `pnpm --filter @skyops/web types:openapi` |
 | Web e2e (starts API + preview via scripts) | `pnpm test:e2e` |
 
 ## Testing
@@ -319,7 +336,7 @@ pnpm --filter @skyops/api exec jest --runInBand
 pnpm --filter @skyops/api exec jest --config ./test/jest-e2e.json --runInBand
 ```
 
-Coverage themes: serial validation, maintenance calculations, mission transitions and overlap, reassignment, fleet health, auth-backed flows where applicable.
+Coverage themes: serial validation, maintenance calculations, mission transitions and overlap, reassignment, fleet health, create/update mission **negative** cases, auth-backed flows where applicable.
 
 ### Frontend
 
@@ -334,7 +351,26 @@ Playwright (`apps/web/playwright.config.ts`) starts:
 1. API + test DB via `scripts/start-e2e-api.sh`
 2. Preview server via `scripts/start-e2e-web.sh`
 
-The scenario signs in, creates a drone and mission, advances the mission through states, checks the dashboard (e.g. Total drones, Maintenance watchlist), and asserts the drone enters maintenance after completion.
+- **Happy path:** signs in, creates a drone and mission, advances the mission through states, checks the dashboard (e.g. Total drones, Maintenance watchlist), and asserts the drone enters maintenance after completion.
+- **Negative path:** API rejects a second mission that overlaps an active window on the same drone (`409`).
+
+## OpenAPI contract
+
+The web app can align with the REST API using a **checked-in OpenAPI document** and generated TypeScript types.
+
+| Artifact | Role |
+| -------- | ---- |
+| [`contracts/openapi.json`](contracts/openapi.json) | Canonical OpenAPI 3 document for the API surface |
+| [`apps/web/src/lib/api/generated/openapi.d.ts`](apps/web/src/lib/api/generated/openapi.d.ts) | Generated types (`openapi-typescript`); must stay in sync with the JSON file |
+
+**Regenerating after API changes**
+
+1. Ensure PostgreSQL is running and `apps/api/.env` matches (same as local dev).
+2. Export from Nest + Swagger: **`pnpm --filter @skyops/api openapi:export`** (writes `contracts/openapi.json`).
+3. Regenerate types: **`pnpm --filter @skyops/web types:openapi`**.
+4. Commit both `contracts/openapi.json` and `apps/web/src/lib/api/generated/openapi.d.ts`.
+
+CI fails if step 3 would change `openapi.d.ts` without a matching commit (see [CI](#ci)).
 
 ## Seed data
 
@@ -379,13 +415,16 @@ On **Render** (or any remote Postgres), demo users are **not** created automatic
 
 ## CI
 
-GitHub Actions runs:
+GitHub Actions runs (in order after install):
 
+- **`pnpm knip`** — unused files and dependency hygiene ([`knip.json`](knip.json))
+- **OpenAPI typings drift** — `pnpm --filter @skyops/web types:openapi` then `git diff --exit-code` on [`apps/web/src/lib/api/generated/openapi.d.ts`](apps/web/src/lib/api/generated/openapi.d.ts) (must match repo-root [`contracts/openapi.json`](contracts/openapi.json))
+- **`pnpm typecheck`** — API `tsc --noEmit` + web project references
 - backend lint, build, unit tests, integration tests
-- frontend lint, build
-- Playwright end-to-end tests
+- frontend lint, build (**`VITE_API_BASE_URL`** is set for the production build step so the bundle and logs match deploy expectations)
+- Playwright Chromium install (`--with-deps` on Linux) and end-to-end tests
 
-Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+Workflow file: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Updating the contract and types is documented under [OpenAPI contract](#openapi-contract).
 
 ## Free deployment (Render)
 
@@ -430,13 +469,13 @@ Full tables and troubleshooting: [docs/RENDER.md](docs/RENDER.md).
 7. **Move** the mission through its lifecycle to completion and observe maintenance-driven drone status when rules require it.
 8. Open the **drone detail** page and add a maintenance log to refresh the maintenance window.
 
-## Trade-offs and next steps
+## Future work
 
-Today’s scope includes **JWT authentication**, **per-user data isolation**, and an operations-oriented dashboard. The architecture is modular by domain (`auth`, `drones`, `missions`, `maintenance`, `reports`) so new behavior can land in the right service without cross-cutting rewrites.
+The current release delivers **JWT authentication**, **workspace-scoped data**, and an operations-focused dashboard. Domains are separated (`auth`, `drones`, `missions`, `maintenance`, `reports`) so new behavior can ship in the appropriate module.
 
-**Priorities for changes:** keep domain rules and migrations explicit, extend tests when you change transitions or maintenance math, and preserve deployability (health checks, env validation, Blueprint-friendly commands).
+**When changing behavior:** keep business rules and migrations explicit, extend tests for mission transitions and maintenance math, and preserve deployability (health checks, env validation, Render-friendly commands).
 
-Plausible extensions:
+Possible extensions:
 
 - Finer-grained RBAC or per-resource policies beyond Pilot / Technician / Manager
 - Mission audit trail events

@@ -4,6 +4,14 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+/** Production TS under src/ (no specs, no e2e bootstrap package). */
+const productionSrcFiles = ['src/**/*.ts'];
+const productionSrcIgnores = [
+  '**/*.spec.ts',
+  'src/e2e/**/*.ts',
+  '**/database/seeds/**/*.ts',
+];
+
 export default tseslint.config(
   {
     ignores: ['eslint.config.mjs'],
@@ -33,10 +41,24 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.spec.ts'],
+    files: productionSrcFiles,
+    ignores: productionSrcIgnores,
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+    },
+  },
+  {
+    files: ['**/*.spec.ts', 'test/**/*.ts'],
     rules: {
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 );

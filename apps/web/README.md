@@ -16,6 +16,7 @@ See the root [README.md](../../README.md) for environment variables, `pnpm dev`,
 pnpm --filter @skyops/web dev         # Vite dev server (default http://localhost:5173)
 pnpm --filter @skyops/web build
 pnpm --filter @skyops/web lint
+pnpm --filter @skyops/web types:openapi  # openapi-typescript from ../../contracts/openapi.json → src/lib/api/generated/openapi.d.ts
 pnpm --filter @skyops/web test:e2e    # starts API + preview via ../../scripts/
 ```
 

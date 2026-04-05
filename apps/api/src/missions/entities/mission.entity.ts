@@ -23,19 +23,12 @@ export enum MissionStatus {
   ABORTED = 'ABORTED',
 }
 
-const MISSION_TRANSITIONS: Record<MissionStatus, MissionStatus[]> = {
-  [MissionStatus.PLANNED]: [
-    MissionStatus.PRE_FLIGHT_CHECK,
-    MissionStatus.ABORTED,
-  ],
-  [MissionStatus.PRE_FLIGHT_CHECK]: [
-    MissionStatus.IN_PROGRESS,
-    MissionStatus.ABORTED,
-  ],
-  [MissionStatus.IN_PROGRESS]: [MissionStatus.COMPLETED, MissionStatus.ABORTED],
-  [MissionStatus.COMPLETED]: [],
-  [MissionStatus.ABORTED]: [],
-};
+/** Missions that occupy the schedule; overlap checks ignore terminal statuses. */
+export const ACTIVE_SCHEDULING_MISSION_STATUSES: MissionStatus[] = [
+  MissionStatus.PLANNED,
+  MissionStatus.PRE_FLIGHT_CHECK,
+  MissionStatus.IN_PROGRESS,
+];
 
 @Entity({ name: 'missions' })
 export class Mission {
@@ -90,12 +83,4 @@ export class Mission {
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt!: Date;
-
-  assertCanTransitionTo(nextStatus: MissionStatus) {
-    if (!MISSION_TRANSITIONS[this.status].includes(nextStatus)) {
-      throw new Error(
-        `Mission cannot transition from ${this.status} to ${nextStatus}.`,
-      );
-    }
-  }
 }

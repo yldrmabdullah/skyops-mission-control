@@ -1,20 +1,34 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../auth/use-auth';
-import { StatePanel } from '../components/StatePanel';
-import { SurfaceCard } from '../components/SurfaceCard';
-import { StatusPill } from '../components/StatusPill';
-import { useNotifications } from '../components/use-notifications';
-import { DroneDangerZone } from '../features/drones/DroneDangerZone';
-import { DroneProfileForm } from '../features/drones/DroneProfileForm';
-import { MaintenanceLogForm } from '../features/drones/MaintenanceLogForm';
+import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useNavigate, useParams, Link } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import {
+  ChevronLeft,
+  Settings2,
+  Wrench,
+  History,
+  AlertTriangle,
+  HelpCircle,
+  Info,
+  Shield,
+} from "lucide-react"
+import { format } from "date-fns"
+import { toast } from "sonner"
+
+import { useAuth } from "../auth/use-auth"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Skeleton } from "@/components/ui/skeleton"
+import { DroneDangerZone } from "../features/drones/DroneDangerZone"
+import { DroneProfileForm } from "../features/drones/DroneProfileForm"
+import { MaintenanceLogForm } from "../features/drones/MaintenanceLogForm"
 import {
   DroneSummaryPanel,
   MaintenanceHistoryPanel,
   MissionHistoryPanel,
-} from '../features/drones/DronePanels';
-import { useFeedbackState } from '../hooks/use-feedback-state';
+} from "../features/drones/DronePanels"
 import {
   createMaintenanceLog,
   deleteDrone,
@@ -22,278 +36,326 @@ import {
   getErrorMessage,
   updateDrone,
   uploadMaintenanceAttachment,
-} from '../lib/api';
-import { invalidateDroneRelatedQueries } from '../lib/query-invalidation';
-import { canManageFleet, canRecordMaintenance } from '../lib/roles';
+} from "../lib/api"
+import { invalidateDroneRelatedQueries } from "../lib/query-invalidation"
+import { canManageFleet, canRecordMaintenance } from "../lib/roles"
+
+const containerVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.4,
+      staggerChildren: 0.1,
+    },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0 },
+}
 
 export function DroneDetailPage() {
-  const { user } = useAuth();
-  const { notify } = useNotifications();
-  const { droneId = '' } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const profileFeedback = useFeedbackState();
-  const maintenanceFeedback = useFeedbackState();
-  const deleteFeedback = useFeedbackState();
-  const [isDeleteArmed, setIsDeleteArmed] = useState(false);
+  const { user } = useAuth()
+  const { droneId = "" } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [isDeleteArmed, setIsDeleteArmed] = useState(false)
 
   const droneQuery = useQuery({
-    queryKey: ['drone', droneId],
+    queryKey: ["drone", droneId],
     queryFn: () => fetchDrone(droneId),
     enabled: Boolean(droneId),
-  });
-  const drone = droneQuery.data;
-  const isLoading = droneQuery.isLoading;
+  })
+  
+  const drone = droneQuery.data
+  const isLoading = droneQuery.isLoading
 
   const updateDroneMutation = useMutation({
     mutationFn: (payload: Parameters<typeof updateDrone>[1]) =>
       updateDrone(droneId, payload),
     onSuccess: async () => {
-      profileFeedback.setFeedback({
-        tone: 'success',
-        message: 'Drone profile updated successfully.',
-      });
-      notify({
-        tone: 'success',
-        title: 'Drone updated',
-        description: 'The drone profile is now up to date.',
-      });
-      await invalidateDroneRelatedQueries(queryClient, droneId);
+      toast.success("Drone profile updated successfully.")
+      await invalidateDroneRelatedQueries(queryClient, droneId)
     },
     onError: (error) => {
-      profileFeedback.setFeedback({
-        tone: 'error',
-        message: getErrorMessage(error),
-      });
+      toast.error(getErrorMessage(error))
     },
-  });
+  })
 
   const createMaintenanceLogMutation = useMutation({
     mutationFn: async ({
       payload,
       file,
     }: {
-      payload: Parameters<typeof createMaintenanceLog>[0];
-      file?: File;
+      payload: Parameters<typeof createMaintenanceLog>[0]
+      file?: File
     }) => {
-      const log = await createMaintenanceLog(payload);
+      const log = await createMaintenanceLog(payload)
       if (file) {
-        await uploadMaintenanceAttachment(log.id, file);
+        await uploadMaintenanceAttachment(log.id, file)
       }
-      return log;
+      return log
     },
     onSuccess: async () => {
-      maintenanceFeedback.setFeedback({
-        tone: 'success',
-        message: 'Maintenance log added successfully.',
-      });
-      notify({
-        tone: 'success',
-        title: 'Maintenance recorded',
-        description: 'The maintenance history and due dates were refreshed.',
-      });
-      await invalidateDroneRelatedQueries(queryClient, droneId);
+      toast.success("Maintenance log added successfully.")
+      await invalidateDroneRelatedQueries(queryClient, droneId)
     },
     onError: (error) => {
-      maintenanceFeedback.setFeedback({
-        tone: 'error',
-        message: getErrorMessage(error),
-      });
+      toast.error(getErrorMessage(error))
     },
-  });
+  })
 
   const deleteDroneMutation = useMutation({
     mutationFn: () => deleteDrone(droneId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['drones'] }),
-        queryClient.invalidateQueries({ queryKey: ['fleet-health'] }),
-      ]);
-      notify({
-        tone: 'success',
-        title: 'Drone deleted',
-        description: 'The drone has been removed from the registry.',
-      });
-      void navigate('/drones');
+        queryClient.invalidateQueries({ queryKey: ["drones"] }),
+        queryClient.invalidateQueries({ queryKey: ["fleet-health"] }),
+      ])
+      toast.success("Drone asset removed from registry.")
+      void navigate("/drones")
     },
     onError: (error) => {
-      deleteFeedback.setFeedback({
-        tone: 'error',
-        message: getErrorMessage(error),
-      });
-      setIsDeleteArmed(false);
+      toast.error(getErrorMessage(error))
+      setIsDeleteArmed(false)
     },
-  });
+  })
 
   if (isLoading) {
     return (
-      <StatePanel
-        description="The drone profile, mission history, and maintenance logs are loading."
-        title="Loading drone detail"
-      />
-    );
+      <div className="space-y-8 p-6 lg:p-8">
+        <div className="flex flex-col gap-4">
+           <Skeleton className="h-10 w-48" />
+           <Skeleton className="h-4 w-full max-w-xl" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           <Skeleton className="h-[400px] md:col-span-1" />
+           <Skeleton className="h-[400px] md:col-span-2" />
+        </div>
+      </div>
+    )
   }
 
-  if (droneQuery.isError) {
-    const message = getErrorMessage(droneQuery.error);
-    const isNotFound = message.toLowerCase().includes('was not found');
-
+  if (droneQuery.isError || !drone) {
+    const message = droneQuery.isError ? getErrorMessage(droneQuery.error) : "Drone data unavailable."
     return (
-      <StatePanel
-        actionHref="/drones"
-        actionLabel="Return to registry"
-        description={
-          isNotFound
-            ? 'The selected drone could not be found. It may have been deleted or the URL may be incorrect.'
-            : message
-        }
-        title={isNotFound ? 'Drone not found' : 'Unable to load drone detail'}
-        tone={isNotFound ? 'warning' : 'error'}
-      />
-    );
+      <div className="p-6 max-w-2xl mx-auto mt-12">
+        <Alert variant="destructive" className="glass">
+          <AlertTriangle className="h-5 w-5" />
+          <AlertTitle>Asset Registry Error</AlertTitle>
+          <AlertDescription className="mt-2">
+            {message}
+          </AlertDescription>
+          <div className="mt-6 flex justify-end">
+            <Button asChild variant="outline">
+              <Link to="/drones">Return to Registry</Link>
+            </Button>
+          </div>
+        </Alert>
+      </div>
+    )
   }
 
-  if (!drone) {
-    return (
-      <StatePanel
-        actionHref="/drones"
-        actionLabel="Return to registry"
-        description="No drone data is available for this route."
-        title="Drone unavailable"
-        tone="warning"
-      />
-    );
-  }
-
-  const canDelete = !drone.missions?.length && !drone.maintenanceLogs?.length;
-  const allowFleetEdits = canManageFleet(user?.role);
-  const allowMaintenance = canRecordMaintenance(user?.role);
+  const canDelete = !drone.missions?.length && !drone.maintenanceLogs?.length
+  const allowFleetEdits = canManageFleet(user?.role)
+  const allowMaintenance = canRecordMaintenance(user?.role)
 
   return (
-    <>
-      <header className="page-header">
-        <div>
-          <div className="badge">Drone Detail</div>
-          <h2>{drone.serialNumber}</h2>
-          <p>
-            Full operational context for one asset: profile updates, maintenance
-            registration, and linked mission history in a single view.
-          </p>
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="p-6 lg:p-10 space-y-8 max-w-[1600px] mx-auto"
+    >
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-border/40">
+        <div className="space-y-4">
+          <Link 
+            to="/drones" 
+            className="group flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+          >
+            <ChevronLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+            Registry
+          </Link>
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-extrabold tracking-tight underline decoration-primary/30 underline-offset-4 decoration-2">
+                {drone.serialNumber}
+              </h1>
+              {drone.maintenanceDue && (
+                <Badge variant="error" className="animate-pulse shadow-sm shadow-rose-500/20">
+                  Maintenance Due
+                </Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground max-w-2xl">
+              Configuration and history for the <span className="font-bold text-foreground/80">{drone.model}</span> fleet unit.
+              Real-time synchronization across fleet management and operation dashboards.
+            </p>
+          </div>
         </div>
-        <div className="stack-inline">
-          {drone.maintenanceDue ? (
-            <div className="badge accent">Maintenance due</div>
-          ) : null}
-          <StatusPill value={drone.status} />
+
+        <div className="flex items-center gap-3 bg-card/10 backdrop-blur-sm p-1.5 rounded-xl border border-border/40 shadow-sm self-start md:self-end">
+           <Badge variant={drone.status === "AVAILABLE" ? "success" : "warning"} className="px-3 py-1 text-sm font-bold uppercase tracking-wider">
+             {drone.status.replace("_", " ")}
+           </Badge>
         </div>
       </header>
 
-      <section className="panel-grid split">
-        {allowFleetEdits ? (
-          <SurfaceCard
-            actions={
-              <span className="muted">
-                Keep serial, status, and maintenance data aligned
-              </span>
-            }
-            title="Edit profile"
-          >
-            <DroneProfileForm
-              key={`${drone.id}-${drone.status}-${drone.totalFlightHours}-${drone.lastMaintenanceDate}`}
-              drone={drone}
-              feedback={profileFeedback.feedback}
-              isPending={updateDroneMutation.isPending}
-              onSubmit={(payload) => {
-                profileFeedback.clearFeedback();
-                updateDroneMutation.mutate(payload);
-              }}
-            />
-          </SurfaceCard>
-        ) : (
-          <SurfaceCard
-            title="Profile"
-            description="Fleet profile changes are limited to workspace managers."
-          >
-            <p className="muted">
-              You are signed in as <strong>{user?.role}</strong>. View-only
-              access to this drone&apos;s registry data.
-            </p>
-          </SurfaceCard>
-        )}
+      <Tabs defaultValue="profile" className="w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sticky top-2 z-40 p-1 rounded-xl bg-background/50 backdrop-blur-lg border border-border/25 shadow-lg">
+          <TabsList className="bg-transparent border-none w-full sm:w-auto p-0">
+            <TabsTrigger value="profile" className="flex-1 sm:flex-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all gap-2">
+              <Settings2 className="h-4 w-4" />
+              Profile
+            </TabsTrigger>
+            <TabsTrigger value="maintenance" className="flex-1 sm:flex-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all gap-2">
+              <Wrench className="h-4 w-4" />
+              Maintenance
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex-1 sm:flex-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all gap-2">
+              <History className="h-4 w-4" />
+              Mission Logs
+            </TabsTrigger>
+          </TabsList>
+          
+          <div className="hidden lg:flex items-center gap-2 pr-2 text-[10px] uppercase font-bold text-muted-foreground">
+             <Info className="h-3 w-3" />
+             Last Sync: {format(new Date(), "HH:mm")}
+          </div>
+        </div>
 
-        {allowMaintenance ? (
-          <SurfaceCard
-            actions={
-              <span className="muted">
-                Routine checks and repairs update due dates automatically
-              </span>
-            }
-            title="Add maintenance log"
-          >
-            <MaintenanceLogForm
-              key={`${drone.id}-${drone.totalFlightHours}-${drone.maintenanceLogs?.length ?? 0}`}
-              droneId={droneId}
-              totalFlightHours={drone.totalFlightHours}
-              feedback={maintenanceFeedback.feedback}
-              isPending={createMaintenanceLogMutation.isPending}
-              onSubmit={(payload, options) => {
-                maintenanceFeedback.clearFeedback();
-                createMaintenanceLogMutation.mutate({
-                  payload,
-                  file: options?.file,
-                });
-              }}
-            />
-          </SurfaceCard>
-        ) : (
-          <SurfaceCard
-            title="Maintenance"
-            description="Technicians and managers record maintenance events."
-          >
-            <p className="muted">
-              Your role ({user?.role}) cannot create maintenance logs in this
-              workspace.
-            </p>
-          </SurfaceCard>
-        )}
-      </section>
+        <AnimatePresence mode="wait">
+          <TabsContent value="profile" className="mt-2 space-y-8 outline-none">
+            <motion.div 
+               variants={itemVariants} 
+               initial="hidden" 
+               animate="visible" 
+               exit={{ opacity: 0, y: -20 }}
+               className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+            >
+              <div className="lg:col-span-2">
+                <div className="glass rounded-2xl p-6 md:p-8 space-y-6">
+                  <div className="flex items-center justify-between border-b border-border/25 pb-4">
+                     <h3 className="text-xl font-bold flex items-center gap-2">
+                       <Settings2 className="h-5 w-5 text-primary" />
+                       Primary Configuration
+                     </h3>
+                     {!allowFleetEdits && (
+                       <Badge variant="outline" className="text-[10px] font-mono">READ_ONLY_ACCESS</Badge>
+                     )}
+                  </div>
+                  {allowFleetEdits ? (
+                    <DroneProfileForm
+                      key={`${drone.id}-${drone.status}-${drone.totalFlightHours}`}
+                      drone={drone}
+                      isPending={updateDroneMutation.isPending}
+                      onSubmit={(payload) => updateDroneMutation.mutate(payload)}
+                    />
+                  ) : (
+                    <Alert className="glass bg-amber-500/5">
+                      <Shield className="h-4 w-4" />
+                      <AlertTitle>Restricted Access</AlertTitle>
+                      <AlertDescription>
+                        You are signed in as <strong>{user?.role}</strong>. Only workspace <strong>MANAGERS</strong> can modify asset configurations.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-8">
+                <DroneSummaryPanel drone={drone} />
+                {allowFleetEdits && (
+                   <DroneDangerZone
+                    canDelete={canDelete}
+                    feedback={null}
+                    isDeleteArmed={isDeleteArmed}
+                    isPending={deleteDroneMutation.isPending}
+                    onDelete={() => {
+                        if (!isDeleteArmed) {
+                          setIsDeleteArmed(true);
+                          return;
+                        }
+                        deleteDroneMutation.mutate();
+                    }}
+                  />
+                )}
+              </div>
+            </motion.div>
+          </TabsContent>
 
-      <section className="panel-grid split section-spaced">
-        <DroneSummaryPanel drone={drone} />
-        <MaintenanceHistoryPanel
-          drone={drone}
-          emptyHint={
-            user?.role === 'PILOT'
-              ? 'Detailed maintenance history is visible to Technicians and Managers only.'
-              : undefined
-          }
-        />
-      </section>
+          <TabsContent value="maintenance" className="mt-2 space-y-8 outline-none">
+            <motion.div 
+               variants={itemVariants} 
+               initial="hidden" 
+               animate="visible" 
+               exit={{ opacity: 0, y: -20 }}
+               className="grid grid-cols-1 xl:grid-cols-5 gap-8"
+            >
+              <div className="xl:col-span-3">
+                <div className="glass rounded-2xl p-6 md:p-8 space-y-6 h-full">
+                  <div className="flex items-center justify-between border-b border-border/25 pb-4 mb-2">
+                     <h3 className="text-xl font-bold flex items-center gap-2">
+                       <Wrench className="h-5 w-5 text-primary" />
+                       New Service Record
+                     </h3>
+                  </div>
+                  {allowMaintenance ? (
+                    <MaintenanceLogForm
+                      key={`${drone.id}-${drone.maintenanceLogs?.length ?? 0}`}
+                      droneId={droneId}
+                      totalFlightHours={drone.totalFlightHours}
+                      isPending={createMaintenanceLogMutation.isPending}
+                      onSubmit={(payload, options) => {
+                        createMaintenanceLogMutation.mutate({
+                          payload,
+                          file: options?.file,
+                        });
+                      }}
+                    />
+                  ) : (
+                    <Alert className="glass bg-amber-500/5">
+                      <HelpCircle className="h-4 w-4" />
+                      <AlertTitle>Insufficent Permissions</AlertTitle>
+                      <AlertDescription>
+                        Standard users cannot manually register maintenance events.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </div>
+              <div className="xl:col-span-2">
+                <MaintenanceHistoryPanel
+                  drone={drone}
+                  emptyHint={
+                    user?.role === "PILOT"
+                      ? "Operational details are visible to Technicians and Managers only."
+                      : undefined
+                  }
+                />
+              </div>
+            </motion.div>
+          </TabsContent>
 
-      <section className="section-spaced">
-        <MissionHistoryPanel drone={drone} />
-      </section>
-
-      {allowFleetEdits ? (
-        <section className="section-spaced">
-          <DroneDangerZone
-            canDelete={canDelete}
-            feedback={deleteFeedback.feedback}
-            isDeleteArmed={isDeleteArmed}
-            isPending={deleteDroneMutation.isPending}
-            onDelete={() => {
-              deleteFeedback.clearFeedback();
-
-              if (!isDeleteArmed) {
-                setIsDeleteArmed(true);
-                return;
-              }
-
-              deleteDroneMutation.mutate();
-            }}
-          />
-        </section>
-      ) : null}
-    </>
-  );
+          <TabsContent value="history" className="mt-2 outline-none">
+            <motion.div 
+               variants={itemVariants} 
+               initial="hidden" 
+               animate="visible" 
+               exit={{ opacity: 0, y: -20 }}
+               className="space-y-4"
+            >
+              <div className="flex items-center justify-between mb-2">
+                 <h2 className="text-2xl font-bold">Operational Timeline</h2>
+                 <Badge variant="outline" className="font-mono">{drone.missions?.length ?? 0} MISSIONS</Badge>
+              </div>
+              <MissionHistoryPanel drone={drone} />
+            </motion.div>
+          </TabsContent>
+        </AnimatePresence>
+      </Tabs>
+    </motion.div>
+  )
 }

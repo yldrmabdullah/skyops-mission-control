@@ -8,6 +8,8 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export type SortOrder = "ASC" | "DESC";
+
 export interface ApiErrorResponse {
   statusCode: number;
   error: string;

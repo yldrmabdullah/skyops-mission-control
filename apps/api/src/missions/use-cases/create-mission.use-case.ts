@@ -1,23 +1,25 @@
-import {
-  Injectable,
-  ConflictException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
-import { IMissionsRepository } from '../repositories/missions.repository.interface';
-import { IDronesRepository } from '../../drones/repositories/drones.repository.interface';
+import { Injectable } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { WorkspaceContext } from '../../common/workspace-context/workspace-context';
 import { CreateMissionDto } from '../dto/create-mission.dto';
 import { parseIsoDateOrThrow } from '../../common/utils/date.utils';
-import { MissionStatus } from '../entities/mission.entity';
-import { DroneStatus } from '../../drones/entities/drone.entity';
+import { Mission, MissionStatus } from '../entities/mission.entity';
+import { Drone, DroneStatus } from '../../drones/entities/drone.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { overlapActiveMissionWhere } from '../utils/mission-overlap.where';
+import {
+  DroneNotFoundException,
+  DroneUnavailableForNewMissionException,
+  InvalidMissionScheduleException,
+  MissionScheduleOverlapException,
+} from '../exceptions/mission-specific.exceptions';
 
 @Injectable()
 export class CreateMissionUseCase {
   constructor(
-    private readonly missionsRepository: IMissionsRepository,
-    private readonly dronesRepository: IDronesRepository,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly workspaceContext: WorkspaceContext,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -28,51 +30,52 @@ export class CreateMissionUseCase {
     const plannedStart = parseIsoDateOrThrow(dto.plannedStart, 'Planned start');
     const plannedEnd = parseIsoDateOrThrow(dto.plannedEnd, 'Planned end');
 
-    // Validation
-    const drone = await this.dronesRepository.findOne(
-      dto.droneId,
-      fleetOwnerId,
-    );
-    if (!drone) {
-      throw new NotFoundException(`Drone ${dto.droneId} was not found.`);
-    }
-
-    if (drone.status !== DroneStatus.AVAILABLE) {
-      throw new BadRequestException(
-        `Drone ${dto.droneId} is not available for a new mission.`,
-      );
-    }
-
     if (plannedStart >= plannedEnd) {
-      throw new BadRequestException(
-        'Planned start must be before planned end.',
-      );
+      throw new InvalidMissionScheduleException();
     }
 
-    const overlap = await this.missionsRepository.findOverlapping(
-      dto.droneId,
-      plannedStart,
-      plannedEnd,
-    );
-    if (overlap) {
-      void this.notificationsService
-        .notifyScheduleConflictIfEnabled(
-          fleetOwnerId,
-          'This drone already has an overlapping active mission in the selected window.',
-        )
-        .catch(() => undefined);
-      throw new ConflictException(
-        'This drone already has a mission scheduled during this time window.',
-      );
-    }
+    /**
+     * Pessimistic lock on the drone row serializes concurrent scheduling for the same drone
+     * under READ COMMITTED (overlap check + insert are atomic per drone).
+     */
+    return this.dataSource.transaction(async (manager) => {
+      const drone = await manager.findOne(Drone, {
+        where: { id: dto.droneId, ownerId: fleetOwnerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!drone) {
+        throw new DroneNotFoundException(dto.droneId);
+      }
 
-    const mission = this.missionsRepository.create({
-      ...dto,
-      plannedStart,
-      plannedEnd,
-      status: MissionStatus.PLANNED,
+      if (drone.status !== DroneStatus.AVAILABLE) {
+        throw new DroneUnavailableForNewMissionException(
+          dto.droneId,
+          drone.status,
+        );
+      }
+
+      const overlap = await manager.findOne(Mission, {
+        where: overlapActiveMissionWhere(dto.droneId, plannedStart, plannedEnd),
+      });
+      if (overlap) {
+        void this.notificationsService
+          .notifyScheduleConflictIfEnabled(
+            fleetOwnerId,
+            'This drone already has an overlapping active mission in the selected window.',
+          )
+          .catch(() => undefined);
+        throw new MissionScheduleOverlapException(
+          'This drone already has a mission scheduled during this time window.',
+        );
+      }
+
+      const mission = manager.create(Mission, {
+        ...dto,
+        plannedStart,
+        plannedEnd,
+        status: MissionStatus.PLANNED,
+      });
+      return manager.save(mission);
     });
-
-    return this.missionsRepository.save(mission);
   }
 }

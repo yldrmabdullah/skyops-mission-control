@@ -1,11 +1,5 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { IMissionsRepository } from '../repositories/missions.repository.interface';
-import { IDronesRepository } from '../../drones/repositories/drones.repository.interface';
 import { WorkspaceContext } from '../../common/workspace-context/workspace-context';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { TransitionMissionDto } from '../dto/transition-mission.dto';
@@ -15,6 +9,13 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { resolveDroneStatusAfterMissionCompletion } from '../../drones/utils/drone-rules';
 import { calculateNextMaintenanceDueDate } from '../../drones/utils/maintenance.utils';
+import { MissionStateMachine } from '../utils/mission-transition.utils';
+import {
+  MissionAbortRequiresReasonException,
+  MissionCompletionRequiresFlightHoursException,
+  MissionNotFoundException,
+  MissionStartDroneUnavailableException,
+} from '../exceptions/mission-specific.exceptions';
 
 @Injectable()
 export class TransitionMissionUseCase {
@@ -22,7 +23,6 @@ export class TransitionMissionUseCase {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly missionsRepository: IMissionsRepository,
-    private readonly dronesRepository: IDronesRepository,
     private readonly notificationsService: NotificationsService,
     private readonly workspaceContext: WorkspaceContext,
   ) {}
@@ -32,25 +32,21 @@ export class TransitionMissionUseCase {
 
     const mission = await this.missionsRepository.findOne(id, fleetOwnerId);
     if (!mission) {
-      throw new NotFoundException(`Mission ${id} was not found.`);
+      throw new MissionNotFoundException(id);
     }
 
-    mission.assertCanTransitionTo(dto.status);
+    MissionStateMachine.assertTransition(mission.status, dto.status);
 
     mission.status = dto.status;
     if (dto.status === MissionStatus.IN_PROGRESS) {
       if (mission.drone.status !== DroneStatus.AVAILABLE) {
-        throw new ConflictException(
-          `Drone ${mission.drone.id} is not available.`,
-        );
+        throw new MissionStartDroneUnavailableException(mission.drone.id);
       }
       mission.actualStart = new Date();
       mission.drone.status = DroneStatus.IN_MISSION;
     } else if (dto.status === MissionStatus.COMPLETED) {
       if (!dto.flightHoursLogged) {
-        throw new BadRequestException(
-          'Completing a mission requires flight hours.',
-        );
+        throw new MissionCompletionRequiresFlightHoursException();
       }
       mission.actualEnd = new Date();
       mission.flightHoursLogged = dto.flightHoursLogged;
@@ -77,7 +73,7 @@ export class TransitionMissionUseCase {
     } else if (dto.status === MissionStatus.ABORTED) {
       const abortReason = dto.abortReason?.trim();
       if (!abortReason) {
-        throw new BadRequestException('Aborting a mission requires a reason.');
+        throw new MissionAbortRequiresReasonException();
       }
       mission.abortReason = abortReason;
       mission.actualEnd = new Date();

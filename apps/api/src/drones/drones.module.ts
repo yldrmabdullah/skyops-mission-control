@@ -3,6 +3,7 @@ import { AuditModule } from '../audit/audit.module';
 import { DronePersistenceModule } from './drone-persistence.module';
 import { DronesController } from './drones.controller';
 import { DronesService } from './drones.service';
+import { MaintenanceDueSchedulerService } from './maintenance-due.scheduler';
 import { MissionsModule } from '../missions/missions.module';
 import { MaintenanceModule } from '../maintenance/maintenance.module';
 import { WorkspaceContextModule } from '../common/workspace-context/workspace-context.module';
@@ -16,7 +17,7 @@ import { WorkspaceContextModule } from '../common/workspace-context/workspace-co
     WorkspaceContextModule,
   ],
   controllers: [DronesController],
-  providers: [DronesService],
+  providers: [DronesService, MaintenanceDueSchedulerService],
   exports: [DronesService, DronePersistenceModule],
 })
 export class DronesModule {}

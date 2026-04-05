@@ -1,216 +1,249 @@
-import { useId, useState } from 'react';
-import { DateInput } from '../../components/DateInput';
-import { DecimalTextInput } from '../../components/DecimalTextInput';
-import { FormNotice } from '../../components/FormNotice';
-import { parseLocaleDecimalOrZero } from '../../lib/locale-number';
-import { getSerialFormatHint } from '../../lib/serial-format-hint';
-import type { CreateDronePayload } from '../../types/api';
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import * as z from "zod"
+import { CalendarIcon, Loader2 } from "lucide-react"
+import { format } from "date-fns"
+
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
-  droneModels,
-  editableStatuses,
-  formatEnumLabel,
-} from './drone-detail.utils';
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { droneModels, editableStatuses, formatEnumLabel } from "./drone-detail.utils"
+import type {
+  CreateDronePayload,
+  DroneModel,
+  DroneStatus,
+} from "../../types/api"
 
-const initialDroneForm = {
-  serialNumber: '',
-  model: 'MATRICE_300' as const,
-  status: 'AVAILABLE' as const,
-  totalFlightHours: '0',
-  lastMaintenanceDate: new Date().toISOString().slice(0, 10),
-  flightHoursAtLastMaintenance: '0',
-};
+const droneRegistrySchema = z.object({
+  serialNumber: z.string().min(1, "Serial number is required").toUpperCase(),
+  model: z.string().min(1, "Model is required"),
+  status: z.string().min(1, "Status is required"),
+  totalFlightHours: z.string().refine((val) => !isNaN(Number(val.replace(",", "."))), {
+    message: "Must be a valid number",
+  }),
+  flightHoursAtLastMaintenance: z.string().refine((val) => !isNaN(Number(val.replace(",", "."))), {
+    message: "Must be a valid number",
+  }),
+  lastMaintenanceDate: z.date({
+    message: "Last maintenance date is required",
+  }),
+})
 
-interface Feedback {
-  tone: 'success' | 'error';
-  message: string;
-}
+type DroneRegistryFormValues = z.infer<typeof droneRegistrySchema>
 
 interface DroneRegistryFormProps {
-  feedback: Feedback | null;
-  isPending: boolean;
-  onSubmit: (payload: CreateDronePayload) => void;
+  feedback: { tone: "success" | "error"; message: string } | null
+  isPending: boolean
+  onSubmit: (payload: CreateDronePayload) => void
 }
 
 export function DroneRegistryForm({
-  feedback,
   isPending,
   onSubmit,
 }: DroneRegistryFormProps) {
-  const [formState, setFormState] = useState(initialDroneForm);
-  const [clientError, setClientError] = useState<string | null>(null);
-  const serialHintId = useId();
-  const serialHint = getSerialFormatHint(formState.serialNumber);
+  const form = useForm<DroneRegistryFormValues>({
+    resolver: zodResolver(droneRegistrySchema),
+    defaultValues: {
+      serialNumber: "",
+      model: "MATRICE_300",
+      status: "AVAILABLE",
+      totalFlightHours: "0",
+      flightHoursAtLastMaintenance: "0",
+      lastMaintenanceDate: new Date(),
+    },
+  })
+
+  function handleSubmit(values: DroneRegistryFormValues) {
+    onSubmit({
+      serialNumber: values.serialNumber.trim(),
+      model: values.model as DroneModel,
+      status: values.status as DroneStatus,
+      totalFlightHours: Number(values.totalFlightHours.replace(",", ".")),
+      flightHoursAtLastMaintenance: Number(values.flightHoursAtLastMaintenance.replace(",", ".")),
+      lastMaintenanceDate: values.lastMaintenanceDate.toISOString(),
+    })
+  }
 
   return (
-    <form
-      className="form-grid"
-      data-testid="create-drone-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setClientError(null);
-
-        const totalFlightHours = parseLocaleDecimalOrZero(
-          formState.totalFlightHours,
-        );
-        const flightHoursAtLastMaintenance = parseLocaleDecimalOrZero(
-          formState.flightHoursAtLastMaintenance,
-        );
-
-        if (
-          !Number.isFinite(totalFlightHours) ||
-          totalFlightHours < 0 ||
-          !Number.isFinite(flightHoursAtLastMaintenance) ||
-          flightHoursAtLastMaintenance < 0
-        ) {
-          setClientError(
-            'Enter valid flight hour values. Use a period or comma as the decimal separator.',
-          );
-          return;
-        }
-
-        onSubmit({
-          serialNumber: formState.serialNumber.trim().toUpperCase(),
-          model: formState.model,
-          status: formState.status,
-          totalFlightHours,
-          lastMaintenanceDate: new Date(
-            `${formState.lastMaintenanceDate}T00:00:00`,
-          ).toISOString(),
-          flightHoursAtLastMaintenance,
-        });
-      }}
-    >
-      <label className="field">
-        <span className="field-label">Serial number</span>
-        <input
-          required
-          aria-describedby={serialHintId}
-          className="input"
-          data-testid="drone-serial-input"
-          placeholder="SKY-A1B2-C3D4"
-          value={formState.serialNumber}
-          onChange={(event) => {
-            setClientError(null);
-            setFormState((currentState) => ({
-              ...currentState,
-              serialNumber: event.target.value,
-            }));
-          }}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="serialNumber"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Serial Number</FormLabel>
+              <FormControl>
+                <Input
+                  data-testid="drone-serial-input"
+                  placeholder="SKY-XXXX-XXXX"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-        <p
-          className={`field-hint ${serialHint.valid ? 'serial-hint--valid' : ''}`}
-          id={serialHintId}
-          role="status"
-        >
-          {serialHint.text}
-        </p>
-      </label>
 
-      <div className="form-row">
-        <label className="field">
-          <span className="field-label">Model</span>
-          <select
-            className="select"
-            value={formState.model}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                model: event.target.value as typeof formState.model,
-              }))
-            }
-          >
-            {droneModels.map((model) => (
-              <option key={model} value={model}>
-                {formatEnumLabel(model)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="field">
-          <span className="field-label">Status</span>
-          <select
-            className="select"
-            value={formState.status}
-            onChange={(event) =>
-              setFormState((currentState) => ({
-                ...currentState,
-                status: event.target.value as typeof formState.status,
-              }))
-            }
-          >
-            {editableStatuses.map((status) => (
-              <option key={status} value={status}>
-                {formatEnumLabel(status)}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="form-row">
-        <label className="field">
-          <span className="field-label">Total flight hours</span>
-          <DecimalTextInput
-            className="input"
-            value={formState.totalFlightHours}
-            onChange={(value) => {
-              setClientError(null);
-              setFormState((currentState) => ({
-                ...currentState,
-                totalFlightHours: value,
-              }));
-            }}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="model"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Model</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {droneModels.map((model) => (
+                      <SelectItem key={model} value={model}>
+                        {formatEnumLabel(model)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </label>
 
-        <label className="field">
-          <span className="field-label">Hours at last maintenance</span>
-          <DecimalTextInput
-            className="input"
-            value={formState.flightHoursAtLastMaintenance}
-            onChange={(value) => {
-              setClientError(null);
-              setFormState((currentState) => ({
-                ...currentState,
-                flightHoursAtLastMaintenance: value,
-              }));
-            }}
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Initial Status</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {editableStatuses.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {formatEnumLabel(status)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </label>
-      </div>
+        </div>
 
-      <p className="field-hint">
-        Decimal separator: period (1.5) or comma (1,5) — both are accepted.
-      </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="totalFlightHours"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Total Flight Hours</FormLabel>
+                <FormControl>
+                  <Input
+                    aria-label="Total flight hours"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-      <DateInput
-        label="Last maintenance date"
-        required
-        value={formState.lastMaintenanceDate}
-        onChange={(value) =>
-          setFormState((currentState) => ({
-            ...currentState,
-            lastMaintenanceDate: value,
-          }))
-        }
-      />
+          <FormField
+            control={form.control}
+            name="flightHoursAtLastMaintenance"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Hours at Last Service</FormLabel>
+                <FormControl>
+                  <Input
+                    aria-label="Hours at last maintenance"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
-      {clientError ? <FormNotice tone="error" message={clientError} /> : null}
-      {feedback ? (
-        <FormNotice tone={feedback.tone} message={feedback.message} />
-      ) : null}
+        <FormField
+          control={form.control}
+          name="lastMaintenanceDate"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel className="mb-2">Last Maintenance Date</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full pl-3 text-left font-normal bg-background/50",
+                        !field.value && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value ? (
+                        format(field.value, "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={field.value}
+                    onSelect={field.onChange}
+                    disabled={(date) =>
+                      date > new Date() || date < new Date("1900-01-01")
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      <div className="form-actions">
-        <button
-          className="button"
-          data-testid="create-drone-submit"
-          disabled={isPending}
-          type="submit"
-        >
-          {isPending ? 'Saving...' : 'Register drone'}
-        </button>
-      </div>
-    </form>
-  );
+        <div className="flex justify-end pt-4">
+          <Button
+            type="submit"
+            data-testid="create-drone-submit"
+            disabled={isPending}
+            className="w-full md:w-auto min-w-[140px]"
+          >
+            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending ? "Registering..." : "Register Drone"}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  )
 }

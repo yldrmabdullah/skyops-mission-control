@@ -11,6 +11,7 @@ import { AuditLogPage } from './pages/AuditLogPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 
 export function App() {
   return (
@@ -29,6 +30,7 @@ export function App() {
           <Route path="drones" element={<DronesPage />} />
           <Route path="drones/:droneId" element={<DroneDetailPage />} />
           <Route path="missions" element={<MissionsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="audit" element={<AuditLogPage />} />
           <Route path="*" element={<NotFoundPage />} />

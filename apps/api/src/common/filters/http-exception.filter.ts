@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { QueryFailedError } from 'typeorm';
 
 interface ErrorResponse {
   statusCode: number;
@@ -31,14 +32,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let errorResponse: Partial<ErrorResponse> = {
+    const base: Pick<ErrorResponse, 'timestamp' | 'path'> = {
       timestamp: new Date().toISOString(),
       path: request.url,
     };
 
     if (exception instanceof HttpException) {
-      status = exception.getStatus();
+      const status = exception.getStatus();
       const exceptionRes = exception.getResponse();
 
       let message: string | string[];
@@ -54,8 +54,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = exception.message;
       }
 
-      errorResponse = {
-        ...errorResponse,
+      const errorResponse: Partial<ErrorResponse> = {
+        ...base,
         statusCode: status,
         error: exception.name,
         message,
@@ -69,21 +69,36 @@ export class HttpExceptionFilter implements ExceptionFilter {
           errorResponse.details = exceptionRes.details;
         }
       }
-    } else {
-      // Unhandled / Internal Server Errors
-      this.logger.error(
-        `[${request.method}] ${request.url} - Unhandled Exception`,
-        exception instanceof Error ? exception.stack : String(exception),
-      );
 
-      errorResponse = {
-        ...errorResponse,
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        error: 'InternalServerError',
-        message: 'An unexpected operational error occurred.',
-      };
+      return response.status(status).json(errorResponse);
     }
 
-    response.status(status).json(errorResponse);
+    if (exception instanceof QueryFailedError) {
+      const pgCode = (exception.driverError as { code?: string } | undefined)
+        ?.code;
+      /** Postgres exclusion constraint violation (e.g. overlapping mission windows). */
+      if (pgCode === '23P01') {
+        return response.status(HttpStatus.CONFLICT).json({
+          ...base,
+          statusCode: HttpStatus.CONFLICT,
+          error: 'ExclusionViolation',
+          message:
+            'This schedule conflicts with an existing active mission on the same drone.',
+          code: 'MISSION_SCHEDULE_OVERLAP',
+        } satisfies ErrorResponse);
+      }
+    }
+
+    this.logger.error(
+      `[${request.method}] ${request.url} - Unhandled Exception`,
+      exception instanceof Error ? exception.stack : String(exception),
+    );
+
+    return response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      ...base,
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      error: 'InternalServerError',
+      message: 'An unexpected operational error occurred.',
+    } satisfies ErrorResponse);
   }
 }

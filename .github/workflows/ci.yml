@@ -30,6 +30,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Knip (unused files & dependencies)
+        run: pnpm knip
+
+      - name: OpenAPI types match contract
+        run: pnpm --filter @skyops/web types:openapi && git diff --exit-code apps/web/src/lib/api/generated/openapi.d.ts
+
+      - name: Typecheck (non-redundant with package builds)
+        run: pnpm typecheck
+
       - name: Lint backend
         run: pnpm --filter @skyops/api lint
 
@@ -47,6 +56,8 @@ jobs:
 
       - name: Build frontend
         run: pnpm --filter @skyops/web build
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:3000/api
 
       - name: Install Playwright browsers
         run: pnpm --filter @skyops/web exec playwright install --with-deps chromium

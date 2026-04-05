@@ -1,0 +1,41 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["apps/web/src/lib/api/generated/**"],
+  "workspaces": {
+    "apps/api": {
+      "entry": [
+        "src/main.ts",
+        "src/database/docker-entry.ts",
+        "scripts/export-openapi.ts",
+        "test/**/*.ts"
+      ],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "ignore": ["src/database/migrations/**"]
+    },
+    "apps/web": {
+      "entry": ["index.html", "e2e/**/*.ts"],
+      "project": ["src/**/*.ts", "src/**/*.tsx", "e2e/**/*.ts"],
+      "ignore": ["src/components/ui/**"]
+    }
+  },
+  "ignoreDependencies": [
+    "@radix-ui/react-accordion",
+    "@radix-ui/react-aspect-ratio",
+    "@radix-ui/react-checkbox",
+    "@radix-ui/react-collapsible",
+    "@radix-ui/react-context-menu",
+    "@radix-ui/react-icons",
+    "@radix-ui/react-menubar",
+    "@radix-ui/react-navigation-menu",
+    "@radix-ui/react-progress",
+    "@radix-ui/react-radio-group",
+    "@radix-ui/react-slider",
+    "@radix-ui/react-switch",
+    "@radix-ui/react-toast",
+    "@radix-ui/react-toggle",
+    "@radix-ui/react-toggle-group",
+    "@radix-ui/react-tooltip",
+    "swagger-ui-express",
+    "lint-staged"
+  ]
+}

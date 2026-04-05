@@ -12,6 +12,10 @@ import { User } from '../../auth/entities/user.entity';
 import { MaintenanceLog } from '../../maintenance/entities/maintenance-log.entity';
 import { Mission } from '../../missions/entities/mission.entity';
 import { numericTransformer } from '../../database/numeric.transformer';
+import {
+  isMaintenanceDue as isMaintenanceDueForDrone,
+  isMaintenanceWatchlistCandidate as isMaintenanceWatchlistCandidateForDrone,
+} from '../utils/maintenance.utils';
 
 export enum DroneModel {
   PHANTOM_4 = 'PHANTOM_4',
@@ -82,21 +86,20 @@ export class Drone {
   maintenanceLogs!: MaintenanceLog[];
 
   isMaintenanceDue(currentDate = new Date()): boolean {
-    const hoursSinceMaintenance = Number(
-      (this.totalFlightHours - this.flightHoursAtLastMaintenance).toFixed(1),
-    );
-    return (
-      hoursSinceMaintenance >= 50 ||
-      this.nextMaintenanceDueDate.getTime() <= currentDate.getTime()
-    );
+    return isMaintenanceDueForDrone({
+      totalFlightHours: this.totalFlightHours,
+      flightHoursAtLastMaintenance: this.flightHoursAtLastMaintenance,
+      nextMaintenanceDueDate: this.nextMaintenanceDueDate,
+      currentDate,
+    });
   }
 
   isMaintenanceWatchlistCandidate(currentDate = new Date()): boolean {
-    if (this.isMaintenanceDue(currentDate)) return true;
-
-    // Within 7 days
-    const threshold = new Date(currentDate);
-    threshold.setUTCDate(threshold.getUTCDate() + 7);
-    return this.nextMaintenanceDueDate.getTime() <= threshold.getTime();
+    return isMaintenanceWatchlistCandidateForDrone({
+      totalFlightHours: this.totalFlightHours,
+      flightHoursAtLastMaintenance: this.flightHoursAtLastMaintenance,
+      nextMaintenanceDueDate: this.nextMaintenanceDueDate,
+      referenceDate: currentDate,
+    });
   }
 }

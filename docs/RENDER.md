@@ -36,7 +36,13 @@ Optional local-style vars: `JWT_EXPIRES_IN` (default in app if unset).
 
 Health check path: `/api/health` (global prefix is `api`, so full path is correct in Blueprint).
 
-**Database / users:** On deploy, TypeORM runs **migrations** only (`migrationsRun: true` in `typeorm.config.ts`). There is **no** automatic seed on Render. Existing Postgres data is **not** wiped; new migrations alter the schema in place.
+### Scheduled jobs (maintenance due)
+
+The API registers **`@nestjs/schedule`** and a **daily** job that moves **AVAILABLE** drones to **`MAINTENANCE`** when the 50h/90d due rule is satisfied, so idle fleets still converge without waiting for a mission completion.
+
+**Render caveat:** On **free** or **sleeping** web services, the Node process may not run 24/7. Cron fires only while the API instance is **awake** (traffic wakes it; then the next scheduled tick may run). For strict wall-clock guarantees, use a **paid** always-on instance, an **external scheduler** hitting a secured endpoint, or a worker service.
+
+**Database / users:** On deploy, TypeORM runs **migrations** only (`migrationsRun: true` in `typeorm.config.ts`). There is **no** automatic seed on Render. Existing Postgres data is **not** wiped; new migrations alter the schema in place. A migration enables the **`btree_gist`** extension and an **exclusion constraint** on overlapping active mission windows; managed Postgres on Render supports this (same as stock PostgreSQL).
 
 To add demo logins against a hosted DB from your machine, use the **External** `DATABASE_URL` from the Render Postgres dashboard (full hostname). From `apps/api` with `.env` containing `DATABASE_URL` (or export it in the shell):
 

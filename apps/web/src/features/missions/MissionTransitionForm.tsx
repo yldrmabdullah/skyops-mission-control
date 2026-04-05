@@ -1,203 +1,360 @@
-import { useState } from 'react';
-import { DateInput } from '../../components/DateInput';
-import { DecimalTextInput } from '../../components/DecimalTextInput';
-import { FormNotice } from '../../components/FormNotice';
-import { parseLocaleDecimal } from '../../lib/locale-number';
-import { formatEnumLabel } from '../../lib/format';
-import type { Mission } from '../../types/api';
-import {
-  createTransitionForm,
-  getAllowedTransitions,
-  type TransitionFormState,
-  transitionFormToPayload,
-} from './mission-form.utils';
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useEffect } from "react"
+import { useForm } from "react-hook-form"
+import * as z from "zod"
+import { CalendarIcon, Loader2, ArrowRightLeft, Clock, Activity } from "lucide-react"
+import { format } from "date-fns"
 
-interface Feedback {
-  tone: 'success' | 'error';
-  message: string;
-}
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { Textarea } from "@/components/ui/textarea"
+import { formatEnumLabel } from "../../lib/format"
+import type { Mission, MissionStatus, TransitionMissionPayload } from "../../types/api"
+import {
+  getAllowedTransitions,
+  transitionFormToPayload,
+} from "./mission-form.utils"
+
+const transitionSchema = z.object({
+  status: z.string().min(1, "Status is required"),
+  actualStart: z.date().optional(),
+  actualEnd: z.date().optional(),
+  flightHoursLogged: z.string().optional().refine((val) => !val || !isNaN(Number(val.replace(",", "."))), {
+    message: "Must be a valid number",
+  }),
+  abortReason: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.status === "IN_PROGRESS" && !data.actualStart) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Actual start date is required",
+      path: ["actualStart"],
+    })
+  }
+  if ((data.status === "COMPLETED" || data.status === "ABORTED") && !data.actualEnd) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Actual end date is required",
+      path: ["actualEnd"],
+    })
+  }
+  if (data.status === "COMPLETED") {
+    const hours = Number(data.flightHoursLogged?.replace(",", ".") || "0")
+    if (hours < 0.1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Flight hours must be at least 0.1 for completion",
+        path: ["flightHoursLogged"],
+      })
+    }
+  }
+  if (data.status === "ABORTED" && (!data.abortReason || data.abortReason.length < 5)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A valid abort reason (min 5 chars) is required",
+      path: ["abortReason"],
+    })
+  }
+})
+
+type TransitionFormValues = z.infer<typeof transitionSchema>
 
 interface MissionTransitionFormProps {
-  feedback: Feedback | null;
-  isPending: boolean;
-  mission: Mission;
-  onSubmit: (payload: ReturnType<typeof transitionFormToPayload>) => void;
+  isPending: boolean
+  mission: Mission
+  onSubmit: (payload: TransitionMissionPayload) => void
 }
 
-export function MissionTransitionForm({
-  feedback,
+function MissionTransitionFormFields({
   isPending,
   mission,
   onSubmit,
 }: MissionTransitionFormProps) {
-  const [formState, setFormState] = useState(() =>
-    createTransitionForm(mission.status),
-  );
-  const [clientError, setClientError] = useState<string | null>(null);
-  const availableTransitions = getAllowedTransitions(mission.status);
-  const activeTransitionStatus = availableTransitions.includes(formState.status)
-    ? formState.status
-    : (availableTransitions[0] ?? mission.status);
+  const allowedStatuses = getAllowedTransitions(mission.status)
+
+  const form = useForm<TransitionFormValues>({
+    resolver: zodResolver(transitionSchema),
+    defaultValues: {
+      status: allowedStatuses[0] ?? "",
+      flightHoursLogged: "0.0",
+      abortReason: "",
+    },
+  })
+
+  const selectedStatus = form.watch("status")
+
+  useEffect(() => {
+    if (selectedStatus === "IN_PROGRESS") {
+      const current = form.getValues("actualStart")
+      if (!current) {
+        form.setValue("actualStart", new Date())
+      }
+    }
+  }, [selectedStatus, form])
+
+  useEffect(() => {
+    if (selectedStatus === "COMPLETED" || selectedStatus === "ABORTED") {
+      const current = form.getValues("actualEnd")
+      if (!current) {
+        form.setValue("actualEnd", new Date())
+      }
+    }
+  }, [selectedStatus, form])
+
+  const handleSubmit = (values: TransitionFormValues) => {
+    const status = values.status as MissionStatus
+    const payload = transitionFormToPayload(
+      {
+        status,
+        actualStart: values.actualStart?.toISOString() ?? "",
+        actualEnd: values.actualEnd?.toISOString() ?? "",
+        flightHoursLogged: values.flightHoursLogged ?? "",
+        abortReason: values.abortReason ?? "",
+      },
+      status,
+    )
+    onSubmit(payload)
+  }
 
   return (
-    <form
-      className="form-grid"
-      data-testid="mission-transition-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setClientError(null);
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                <ArrowRightLeft className="h-3.5 w-3.5" /> Next Lifecycle State
+              </FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger className="h-11 bg-background/50 border-border/50 focus-visible:ring-primary/20 transition-all font-medium">
+                    <SelectValue placeholder="Select target status" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent className="glass">
+                  {allowedStatuses.map((status) => (
+                    <SelectItem 
+                      key={status} 
+                      value={status}
+                      className="font-medium focus:bg-primary/10"
+                    >
+                      {formatEnumLabel(status)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription className="text-[10px]">
+                Moving from {formatEnumLabel(mission.status)}
+              </FormDescription>
+              <FormMessage className="text-[10px] font-bold" />
+            </FormItem>
+          )}
+        />
 
-        if (activeTransitionStatus === 'COMPLETED') {
-          const hours = parseLocaleDecimal(formState.flightHoursLogged);
-          if (!Number.isFinite(hours) || hours < 0.1) {
-            setClientError(
-              'Enter flight hours logged (minimum 0.1). Use a period or comma as the decimal separator.',
-            );
-            return;
-          }
-        }
+        {selectedStatus === "IN_PROGRESS" && (
+          <FormField
+            control={form.control}
+            name="actualStart"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" /> Actual Start Time
+                </FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "h-11 pl-3 text-left font-medium bg-background/50 border-border/50",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "PPP HH:mm")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 glass" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      initialFocus
+                      className="rounded-md border-0"
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage className="text-[10px] font-bold" />
+              </FormItem>
+            )}
+          />
+        )}
 
-        onSubmit(transitionFormToPayload(formState, activeTransitionStatus));
-      }}
-    >
-      <div className="card-header">
+        {(selectedStatus === "COMPLETED" || selectedStatus === "ABORTED") && (
+          <FormField
+            control={form.control}
+            name="actualEnd"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" /> Actual Completion Time
+                </FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "h-11 pl-3 text-left font-medium bg-background/50 border-border/50",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "PPP HH:mm")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 glass" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      initialFocus
+                      className="rounded-md border-0"
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage className="text-[10px] font-bold" />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {selectedStatus === "COMPLETED" && (
+          <FormField
+            control={form.control}
+            name="flightHoursLogged"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" /> Flight Hours to Log
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    aria-label="Flight hours logged"
+                    {...field}
+                    type="text"
+                    placeholder="e.g. 1.5"
+                    className="h-11 bg-background/50 border-border/50 focus-visible:ring-primary/20 font-medium"
+                  />
+                </FormControl>
+                <FormDescription className="text-[10px]">
+                  Total duration of flight in decimal hours.
+                </FormDescription>
+                <FormMessage className="text-[10px] font-bold" />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {selectedStatus === "ABORTED" && (
+          <FormField
+            control={form.control}
+            name="abortReason"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground text-destructive">
+                  Reason for Aborting
+                </FormLabel>
+                <FormControl>
+                  <Textarea 
+                    {...field} 
+                    placeholder="Describe why the mission was stopped..." 
+                    className="min-h-[100px] bg-background/50 border-border/50 focus-visible:ring-destructive/20 font-medium resize-none shadow-inner"
+                  />
+                </FormControl>
+                <FormMessage className="text-[10px] font-bold" />
+              </FormItem>
+            )}
+          />
+        )}
+
+        <Button
+          type="submit"
+          data-testid="mission-transition-submit"
+          className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-[0.98]"
+          disabled={isPending || !selectedStatus}
+        >
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Updating Mission...
+            </>
+          ) : (
+            `Confirm Transition to ${selectedStatus ? formatEnumLabel(selectedStatus) : "..."}`
+          )}
+        </Button>
+      </form>
+    </Form>
+  )
+}
+
+export function MissionTransitionForm(props: MissionTransitionFormProps) {
+  const allowedStatuses = getAllowedTransitions(props.mission.status)
+
+  if (allowedStatuses.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3 bg-muted/20 rounded-xl border border-dashed border-border">
+        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+          <Activity className="h-6 w-6 text-muted-foreground opacity-50" />
+        </div>
         <div>
-          <h3>Lifecycle transition</h3>
-          <p className="card-subtitle">
-            Transition rules are enforced by the backend.
+          <p className="text-sm font-bold">No further transitions</p>
+          <p className="text-xs text-muted-foreground">
+            This mission has reached its final state ({props.mission.status}).
           </p>
         </div>
       </div>
+    )
+  }
 
-      {availableTransitions.length === 0 ? (
-        <div className="empty-state">
-          This mission is already in a terminal state.
-        </div>
-      ) : (
-        <>
-          <label className="field">
-            <span className="field-label">Next status</span>
-            <select
-              className="select"
-              data-testid="mission-transition-select"
-              value={activeTransitionStatus}
-              onChange={(event) => {
-                setClientError(null);
-                setFormState((currentState) => ({
-                  ...currentState,
-                  status: event.target.value as TransitionFormState['status'],
-                }));
-              }}
-            >
-              {availableTransitions.map((status) => (
-                <option key={status} value={status}>
-                  {formatEnumLabel(status)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {activeTransitionStatus === 'IN_PROGRESS' ? (
-            <DateInput
-              label="Actual start"
-              type="datetime-local"
-              value={formState.actualStart}
-              onChange={(value) =>
-                setFormState((currentState) => ({
-                  ...currentState,
-                  actualStart: value,
-                }))
-              }
-            />
-          ) : null}
-
-          {activeTransitionStatus === 'COMPLETED' ? (
-            <div className="form-field-group">
-              <div className="form-row">
-                <DateInput
-                  compact
-                  label="Actual end"
-                  type="datetime-local"
-                  value={formState.actualEnd}
-                  onChange={(value) =>
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      actualEnd: value,
-                    }))
-                  }
-                />
-
-                <label className="field">
-                  <span className="field-label">Flight hours logged</span>
-                  <DecimalTextInput
-                    required
-                    className="input"
-                    value={formState.flightHoursLogged}
-                    onChange={(value) => {
-                      setClientError(null);
-                      setFormState((currentState) => ({
-                        ...currentState,
-                        flightHoursLogged: value,
-                      }));
-                    }}
-                  />
-                </label>
-              </div>
-              <p className="field-hint form-hint-below-pair">
-                Decimal: 1.5 or 1,5 — both accepted.
-              </p>
-            </div>
-          ) : null}
-
-          {activeTransitionStatus === 'ABORTED' ? (
-            <>
-              <DateInput
-                label="Actual end"
-                type="datetime-local"
-                value={formState.actualEnd}
-                onChange={(value) =>
-                  setFormState((currentState) => ({
-                    ...currentState,
-                    actualEnd: value,
-                  }))
-                }
-              />
-
-              <label className="field">
-                <span className="field-label">Abort reason</span>
-                <textarea
-                  required
-                  className="input textarea"
-                  rows={4}
-                  value={formState.abortReason}
-                  onChange={(event) =>
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      abortReason: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </>
-          ) : null}
-        </>
-      )}
-
-      {clientError ? <FormNotice tone="error" message={clientError} /> : null}
-      {feedback ? (
-        <FormNotice tone={feedback.tone} message={feedback.message} />
-      ) : null}
-
-      <div className="form-actions">
-        <button
-          className="button secondary"
-          data-testid="mission-transition-submit"
-          disabled={isPending || availableTransitions.length === 0}
-          type="submit"
-        >
-          {isPending ? 'Updating...' : 'Apply transition'}
-        </button>
-      </div>
-    </form>
-  );
+  return (
+    <MissionTransitionFormFields
+      key={`${props.mission.id}-${props.mission.status}`}
+      {...props}
+    />
+  )
 }

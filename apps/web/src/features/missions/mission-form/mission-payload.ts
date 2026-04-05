@@ -27,7 +27,7 @@ export function transitionFormToPayload(
   formState: TransitionFormState,
   activeStatus: MissionStatus,
 ): TransitionMissionPayload {
-  return {
+  const payload: TransitionMissionPayload = {
     status: activeStatus,
     actualStart: formState.actualStart
       ? new Date(formState.actualStart).toISOString()
@@ -35,13 +35,18 @@ export function transitionFormToPayload(
     actualEnd: formState.actualEnd
       ? new Date(formState.actualEnd).toISOString()
       : undefined,
-    flightHoursLogged: (() => {
-      if (!formState.flightHoursLogged?.trim()) {
-        return undefined;
-      }
-      const n = parseLocaleDecimal(formState.flightHoursLogged);
-      return Number.isFinite(n) ? n : undefined;
-    })(),
     abortReason: formState.abortReason || undefined,
   };
+
+  if (activeStatus === 'COMPLETED') {
+    const raw = formState.flightHoursLogged?.trim();
+    if (raw) {
+      const n = parseLocaleDecimal(raw);
+      if (Number.isFinite(n) && n >= 0.1) {
+        payload.flightHoursLogged = n;
+      }
+    }
+  }
+
+  return payload;
 }

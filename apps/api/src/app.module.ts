@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
@@ -30,6 +31,7 @@ import { CommonAuditModule } from './common/audit/common-audit.module';
       },
     ]),
     TypeOrmModule.forRootAsync(typeOrmModuleAsyncOptions),
+    ScheduleModule.forRoot(),
     AuthModule,
     DronesModule,
     MissionsModule,

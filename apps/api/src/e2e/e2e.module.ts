@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, DataSourceOptions } from 'typeorm';
@@ -38,6 +39,7 @@ import { ReportsModule } from '../reports/reports.module';
         limit: 10_000,
       },
     ]),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       useFactory: () =>
         ({

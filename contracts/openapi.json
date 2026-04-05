@@ -1,0 +1,18 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "SkyOps Mission Control API",
+    "description": "Placeholder until you run `pnpm --filter @skyops/api openapi:export` against a running database (see apps/api/scripts/export-openapi.ts).",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

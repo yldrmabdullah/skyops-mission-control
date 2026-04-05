@@ -71,6 +71,6 @@ export class TypeOrmMaintenanceLogsRepository implements IMaintenanceLogsReposit
   }
 
   create(props: DeepPartial<MaintenanceLog>): MaintenanceLog {
-    return this.repository.create(props) as unknown as MaintenanceLog;
+    return this.repository.create(props);
   }
 }

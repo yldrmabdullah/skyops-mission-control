@@ -10,7 +10,7 @@ export class DomainException extends HttpException {
     message: string,
     public readonly code: string = 'DOMAIN_ERROR',
     status: number = HttpStatus.BAD_REQUEST,
-    public readonly details?: Record<string, any>,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(
       {

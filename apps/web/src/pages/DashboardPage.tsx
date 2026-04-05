@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../auth/use-auth';
-import { FormNotice } from '../components/FormNotice';
 import { DashboardAnalyticsCard } from '../features/dashboard/DashboardAnalyticsCard';
 import { DashboardFleetStatusAndActivity } from '../features/dashboard/DashboardFleetStatusAndActivity';
 import { DashboardMaintenanceAndUpcoming } from '../features/dashboard/DashboardMaintenanceAndUpcoming';
@@ -22,6 +21,10 @@ import {
   markInAppNotificationRead,
 } from '../lib/api';
 import { canScheduleMissions } from '../lib/roles';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -69,63 +72,111 @@ export function DashboardPage() {
   const availableDroneCount = fleetHealth?.statusBreakdown.AVAILABLE ?? 0;
 
   const partialErrors = [
-    fleetHealthQuery.isError ? 'Fleet health report' : null,
-    dronesQuery.isError ? 'Drone list' : null,
-    missionsQuery.isError ? 'Mission list' : null,
-  ].filter(Boolean) as string[];
+    { label: 'Fleet health report', isError: fleetHealthQuery.isError },
+    { label: 'Drone list', isError: dronesQuery.isError },
+    { label: 'Mission list', isError: missionsQuery.isError },
+  ].filter(e => e.isError).map(e => e.label);
+
+  useEffect(() => {
+    if (roleWelcome) {
+      toast.info(roleWelcome, {
+        duration: 5000,
+        id: 'role-welcome',
+      });
+    }
+  }, [roleWelcome]);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
+  };
 
   return (
-    <>
-      {roleWelcome ? (
-        <div className="section-spaced">
-          <FormNotice message={roleWelcome} tone="info" />
-        </div>
-      ) : null}
+    <motion.div 
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+      className="container mx-auto px-4 py-8 lg:px-8 max-w-7xl space-y-8"
+    >
+      <AnimatePresence>
+        {partialErrors.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <Alert variant="destructive" className="glass border-rose-500/50 bg-rose-500/5">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Data Sync Warning</AlertTitle>
+              <AlertDescription>
+                Some dashboard data failed to load: {partialErrors.join(', ')}. 
+                Live updates might be delayed.
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {partialErrors.length ? (
-        <div className="section-spaced">
-          <FormNotice
-            message={`Some dashboard data failed to load: ${partialErrors.join(', ')}. Other sections below may still be useful.`}
-            tone="warning"
-          />
-        </div>
-      ) : null}
-
-      <DashboardPageHeader
-        availableDroneCount={availableDroneCount}
-        fleetHealth={fleetHealth}
-        showMissionBoardLink={canScheduleMissions(user?.role)}
-      />
-
-      <section className="panel-grid split section-spaced">
-        <DashboardAnalyticsCard
-          analytics={analyticsQuery.data}
-          isError={analyticsQuery.isError}
-          isLoading={analyticsQuery.isLoading}
+      <motion.div variants={itemVariants}>
+        <DashboardPageHeader
+          availableDroneCount={availableDroneCount}
+          fleetHealth={fleetHealth}
+          showMissionBoardLink={canScheduleMissions(user?.role)}
         />
-        <DashboardNotificationsCard
-          isError={inAppQuery.isError}
-          isLoading={inAppQuery.isLoading}
-          isMarkReadPending={markReadMutation.isPending}
-          rows={inAppQuery.data ?? []}
-          onMarkRead={(id) => markReadMutation.mutate(id)}
-        />
-      </section>
+      </motion.div>
 
-      <DashboardMaintenanceAndUpcoming
-        dronesError={dronesQuery.isError}
-        maintenanceAlerts={maintenanceAlerts}
-        missionsError={missionsQuery.isError}
-        referenceNow={referenceNow}
-        upcomingMissions={upcomingMissions}
-      />
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="xl:col-span-2 space-y-8">
+          <motion.div variants={itemVariants}>
+            <DashboardAnalyticsCard
+              analytics={analyticsQuery.data}
+              isError={analyticsQuery.isError}
+              isLoading={analyticsQuery.isLoading}
+            />
+          </motion.div>
 
-      <DashboardFleetStatusAndActivity
-        fleetHealth={fleetHealth}
-        fleetHealthError={fleetHealthQuery.isError}
-        missionsError={missionsQuery.isError}
-        recentMissions={recentMissions}
-      />
-    </>
+          <motion.div variants={itemVariants}>
+            <DashboardMaintenanceAndUpcoming
+              dronesError={dronesQuery.isError}
+              maintenanceAlerts={maintenanceAlerts}
+              missionsError={missionsQuery.isError}
+              referenceNow={referenceNow}
+              upcomingMissions={upcomingMissions}
+            />
+          </motion.div>
+
+          <motion.div variants={itemVariants}>
+            <DashboardFleetStatusAndActivity
+              fleetHealth={fleetHealth}
+              fleetHealthError={fleetHealthQuery.isError}
+              missionsError={missionsQuery.isError}
+              recentMissions={recentMissions}
+            />
+          </motion.div>
+        </div>
+
+        <div className="xl:col-span-1">
+          <motion.div variants={itemVariants} className="xl:sticky xl:top-24">
+            <DashboardNotificationsCard
+              isError={inAppQuery.isError}
+              isLoading={inAppQuery.isLoading}
+              isMarkReadPending={markReadMutation.isPending}
+              rows={inAppQuery.data ?? []}
+              onMarkRead={(id) => markReadMutation.mutate(id)}
+            />
+          </motion.div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

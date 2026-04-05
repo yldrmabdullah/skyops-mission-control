@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
-import { DataType, newDb } from 'pg-mem';
 import { User } from '../src/auth/entities/user.entity';
 import {
   Drone,
@@ -14,14 +12,17 @@ import {
   MissionStatus,
   MissionType,
 } from '../src/missions/entities/mission.entity';
-import { AuditService } from '../src/audit/audit.service';
 import { CreateMissionUseCase } from '../src/missions/use-cases/create-mission.use-case';
 import { TransitionMissionUseCase } from '../src/missions/use-cases/transition-mission.use-case';
-import { NotificationsService } from '../src/notifications/notifications.service';
 import { TypeOrmMissionsRepository } from '../src/missions/repositories/typeorm-missions.repository';
 import { TypeOrmDronesRepository } from '../src/drones/repositories/typeorm-drones.repository';
 import { TypeOrmMaintenanceLogsRepository } from '../src/maintenance/repositories/typeorm-maintenance-logs.repository';
 import { WorkspaceContext } from '../src/common/workspace-context/workspace-context';
+import { createInitializedPgMemDataSource } from './pg-mem-typeorm';
+import {
+  createAuditServiceStub,
+  createNotificationsServiceStub,
+} from './stubs/nest-services.stub';
 
 describe('Mission lifecycle integration', () => {
   let dataSource: DataSource;
@@ -32,34 +33,10 @@ describe('Mission lifecycle integration', () => {
   let ownerId: string;
 
   beforeEach(async () => {
-    const database = newDb({
-      autoCreateForeignKeyIndices: true,
-    });
-
-    database.public.registerFunction({
-      name: 'version',
-      returns: DataType.text,
-      implementation: () => '14.0',
-    });
-    database.public.registerFunction({
-      name: 'current_database',
-      returns: DataType.text,
-      implementation: () => 'skyops_test',
-    });
-    database.public.registerFunction({
-      name: 'uuid_generate_v4',
-      returns: DataType.uuid,
-      implementation: () => randomUUID(),
-      impure: true,
-    });
-
-    dataSource = (await database.adapters.createTypeormDataSource({
-      type: 'postgres',
+    dataSource = await createInitializedPgMemDataSource({
       entities: [User, Drone, Mission, MaintenanceLog],
       synchronize: true,
-    })) as DataSource;
-
-    await dataSource.initialize();
+    });
 
     const userRepository = dataSource.getRepository(User);
     const missionRepository = dataSource.getRepository(Mission);
@@ -80,13 +57,8 @@ describe('Mission lifecycle integration', () => {
       userId: ownerId,
     } as WorkspaceContext;
 
-    const auditService = {
-      record: jest.fn().mockResolvedValue(undefined),
-    } as unknown as AuditService;
-    const notificationsService = {
-      notifyScheduleConflictIfEnabled: jest.fn().mockResolvedValue(undefined),
-      notifyMaintenanceDueStub: jest.fn().mockResolvedValue(undefined),
-    } as unknown as NotificationsService;
+    const auditService = createAuditServiceStub();
+    const notificationsService = createNotificationsServiceStub();
 
     const missionsRepo = new TypeOrmMissionsRepository(missionRepository);
     const dronesRepo = new TypeOrmDronesRepository(droneRepository);
@@ -103,17 +75,14 @@ describe('Mission lifecycle integration', () => {
     );
 
     createMissionUseCase = new CreateMissionUseCase(
-      missionsRepo,
-      dronesRepo,
-      auditService,
-      notificationsService,
+      dataSource,
       workspaceContext,
+      notificationsService,
     );
 
     transitionMissionUseCase = new TransitionMissionUseCase(
       dataSource,
       missionsRepo,
-      dronesRepo,
       notificationsService,
       workspaceContext,
     );
@@ -163,5 +132,46 @@ describe('Mission lifecycle integration', () => {
     expect(completedMission.status).toBe(MissionStatus.COMPLETED);
     expect(updatedDrone.totalFlightHours).toBe(51);
     expect(updatedDrone.status).toBe(DroneStatus.MAINTENANCE);
+  });
+
+  it('allows scheduling over a terminal mission window (aborted does not block overlap)', async () => {
+    const drone = await dronesService.create({
+      serialNumber: 'SKY-B2C3-D4E5',
+      model: DroneModel.MATRICE_300,
+      totalFlightHours: 10,
+      flightHoursAtLastMaintenance: 0,
+      lastMaintenanceDate: '2026-03-01T00:00:00.000Z',
+    });
+
+    const start = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const end = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+    const first = await createMissionUseCase.execute({
+      name: 'Will abort',
+      type: MissionType.WIND_TURBINE_INSPECTION,
+      droneId: drone.id,
+      pilotName: 'Pilot',
+      siteLocation: 'Site',
+      plannedStart: start,
+      plannedEnd: end,
+    });
+
+    await transitionMissionUseCase.execute(first.id, {
+      status: MissionStatus.ABORTED,
+      abortReason: 'Weather',
+    });
+
+    const second = await createMissionUseCase.execute({
+      name: 'Replacement slot',
+      type: MissionType.WIND_TURBINE_INSPECTION,
+      droneId: drone.id,
+      pilotName: 'Pilot',
+      siteLocation: 'Site',
+      plannedStart: start,
+      plannedEnd: end,
+    });
+
+    expect(second.id).not.toBe(first.id);
+    expect(second.status).toBe(MissionStatus.PLANNED);
   });
 });

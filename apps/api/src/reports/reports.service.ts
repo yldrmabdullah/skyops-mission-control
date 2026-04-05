@@ -1,12 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { WorkspaceContext } from '../common/workspace-context/workspace-context';
 import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
 import { IMissionsRepository } from '../missions/repositories/missions.repository.interface';
 import { IMaintenanceLogsRepository } from '../maintenance/repositories/maintenance-logs.repository.interface';
+import { Drone } from '../drones/entities/drone.entity';
+import { Mission } from '../missions/entities/mission.entity';
+import { ACTIVE_SCHEDULING_MISSION_STATUSES } from '../missions/entities/mission.entity';
 
 @Injectable()
 export class ReportsService {
   constructor(
+    @InjectRepository(Drone)
+    private readonly droneRepo: Repository<Drone>,
+    @InjectRepository(Mission)
+    private readonly missionRepo: Repository<Mission>,
     @Inject(IDronesRepository)
     private readonly dronesRepository: IDronesRepository,
     @Inject(IMissionsRepository)
@@ -18,48 +27,59 @@ export class ReportsService {
 
   async getFleetHealthReport() {
     const ownerId = this.workspaceContext.fleetOwnerId;
-    const [drones] = await this.dronesRepository.findAll(ownerId, {
-      skip: 0,
-      take: 1000,
-    });
+    const now = new Date();
+    const missionsWindowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-    const totalCount = drones.length;
-    const statusBreakdown = drones.reduce<Record<string, number>>(
-      (acc, drone) => {
-        acc[drone.status] = (acc[drone.status] ?? 0) + 1;
-        return acc;
-      },
-      {},
+    const summary = await this.droneRepo
+      .createQueryBuilder('d')
+      .select('COUNT(d.id)', 'total')
+      .addSelect('COALESCE(AVG(d.totalFlightHours), 0)', 'avgHours')
+      .where('d.ownerId = :ownerId', { ownerId })
+      .getRawOne<{ total: string; avgHours: string }>();
+
+    const statusRows = await this.droneRepo
+      .createQueryBuilder('d')
+      .select('d.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('d.ownerId = :ownerId', { ownerId })
+      .groupBy('d.status')
+      .getRawMany<{ status: string; count: string }>();
+
+    const overdueDrones = await this.droneRepo
+      .createQueryBuilder('d')
+      .where('d.ownerId = :ownerId', { ownerId })
+      .andWhere(
+        '(d.totalFlightHours - d.flightHoursAtLastMaintenance >= 50 OR d.nextMaintenanceDueDate <= :now)',
+        { now },
+      )
+      .getMany();
+
+    const missionsInNext24Hours = await this.missionRepo
+      .createQueryBuilder('m')
+      .innerJoin('m.drone', 'd')
+      .where('d.ownerId = :ownerId', { ownerId })
+      .andWhere('m.plannedStart >= :now', { now })
+      .andWhere('m.plannedStart <= :missionsWindowEnd', { missionsWindowEnd })
+      .andWhere('m.status IN (:...active)', {
+        active: ACTIVE_SCHEDULING_MISSION_STATUSES,
+      })
+      .getCount();
+
+    const totalDroneCount = Number(summary?.total ?? 0);
+    const statusBreakdown = Object.fromEntries(
+      statusRows.map((r) => [r.status, Number(r.count)]),
     );
-
-    const overdueMaintenance = drones.filter((drone) =>
-      drone.isMaintenanceDue(),
-    );
-
-    // For simplicity in this refactor, we are using the filtered drones list
-    // In a real scenario, we might want a more specific repository method for "Upcoming Missions"
-    let upcomingMissionsCount = 0;
-    for (const drone of drones) {
-      upcomingMissionsCount += await this.missionsRepository.countByDroneId(
-        drone.id,
-      );
-    }
 
     const averageFlightHoursPerDrone =
-      totalCount === 0
+      totalDroneCount === 0
         ? 0
-        : Number(
-            (
-              drones.reduce((sum, drone) => sum + drone.totalFlightHours, 0) /
-              totalCount
-            ).toFixed(1),
-          );
+        : Number(Number(summary?.avgHours ?? 0).toFixed(1));
 
     return {
-      totalDroneCount: totalCount,
+      totalDroneCount,
       statusBreakdown,
-      overdueMaintenance,
-      missionsInNext24Hours: upcomingMissionsCount,
+      overdueMaintenance: overdueDrones,
+      missionsInNext24Hours,
       averageFlightHoursPerDrone,
     };
   }
@@ -123,7 +143,7 @@ export class ReportsService {
       .sort((a, b) => b.count - a.count);
 
     return {
-      missionStatusBreakdown, // Simplified for this refactor phase
+      missionStatusBreakdown,
       droneModelBreakdown,
       maintenanceByTechnician,
     };

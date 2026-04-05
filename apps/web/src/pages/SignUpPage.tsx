@@ -1,27 +1,34 @@
-import axios from 'axios';
-import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import { useAuth } from '../auth/use-auth';
 import { AuthShell } from '../components/AuthShell';
-import { FormNotice } from '../components/FormNotice';
-import { ManagerSignupExplainer } from '../components/ManagerSignupExplainer';
 import { fetchAuthStatus, getErrorMessage } from '../lib/api';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
+import { 
+  UserPlus, 
+  Eye, 
+  EyeOff, 
+  ShieldAlert, 
+  Info,
+  ChevronRight,
+  ArrowLeft
+} from 'lucide-react';
 
-const PASSWORD_HINT =
-  'At least 8 characters, including one letter and one number.';
+const PASSWORD_HINT = 'At least 8 characters, including one letter and one number.';
 
 function describeSignupFailure(error: unknown): string {
   const detail = getErrorMessage(error);
-
   if (axios.isAxiosError(error) && error.response?.status === 409) {
     return `${detail} Try signing in, or use a different email address.`;
   }
-
   if (axios.isAxiosError(error) && error.response?.status === 400) {
     return detail || 'Please check the form and try again.';
   }
-
   return detail || 'Something went wrong. Please try again.';
 }
 
@@ -44,7 +51,7 @@ export function SignUpPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      navigate('/', { replace: true });
+      void navigate('/', { replace: true });
     }
   }, [status, navigate]);
 
@@ -71,7 +78,7 @@ export function SignUpPage() {
 
     try {
       await bootstrapWorkspace(email.trim(), password, fullName.trim());
-      navigate('/', { replace: true });
+      void navigate('/', { replace: true });
     } catch (error) {
       setFormError(describeSignupFailure(error));
     } finally {
@@ -81,10 +88,10 @@ export function SignUpPage() {
 
   if (status === 'loading' || statusQuery.isPending) {
     return (
-      <div className="auth-boot">
-        <div className="auth-boot-inner">
-          <div className="auth-boot-mark">SkyOps</div>
-          <p className="muted">Loading…</p>
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground animate-pulse">Initializing Workspace Bootstrap…</p>
         </div>
       </div>
     );
@@ -93,144 +100,150 @@ export function SignUpPage() {
   if (statusQuery.isError) {
     return (
       <AuthShell
-        brandContent={
-          <div className="auth-shell-brand-stack">
-            <ManagerSignupExplainer />
-          </div>
-        }
+        subtitle="Network timeout or server connectivity issue."
+        title="Bootstrap Offline"
         footer={
-          <p className="muted auth-switch">
-            <Link className="auth-inline-link" to="/sign-in">
-              Back to sign in
-            </Link>
-          </p>
+          <Link className="flex items-center justify-center gap-2 text-sm text-primary font-bold hover:underline" to="/sign-in">
+            <ArrowLeft size={14} />
+            Return to Sign In
+          </Link>
         }
-        subtitle="We could not reach the server to verify sign-up availability."
-        title="Connection issue"
       >
-        <FormNotice
-          message="Try again in a moment or contact support if the problem continues."
-          tone="error"
-        />
+        <Alert variant="destructive" className="glass bg-destructive/10 border-destructive/20">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Connection Failed</AlertTitle>
+          <AlertDescription className="text-xs">
+            We could not reach the SkyOps server. Please verify your connection and try again.
+          </AlertDescription>
+        </Alert>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell
-      brandContent={
-        <div className="auth-shell-brand-stack">
-          <ManagerSignupExplainer />
-        </div>
-      }
+      subtitle="Establish a new workspace as the primary Manager. Your crew members are invited later from Settings."
+      title="Create Workspace"
       footer={
-        <p className="muted auth-switch">
+        <p className="text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link className="auth-inline-link" to="/sign-in">
-            Sign in
+          <Link className="text-primary font-bold hover:underline" to="/sign-in">
+            Sign In
           </Link>
         </p>
       }
-      subtitle="You will be the Workspace Manager with full fleet access. Pilot and Technician accounts are added later from Settings."
-      title="Sign up"
     >
-      <div className="signup-form-preamble">
-        <span className="signup-form-ribbon">Workspace Manager</span>
-        <p className="signup-form-hint muted">
-          Registration for fleet owners and operations managers. Manage drones,
-          schedule missions, and invite your crew from Settings.
-        </p>
-      </div>
+      <div className="space-y-4">
+        <Alert className="glass bg-primary/5 border-primary/20">
+          <Info className="h-4 w-4 text-primary" />
+          <AlertTitle className="text-xs font-bold uppercase tracking-widest text-primary">Manager Registration</AlertTitle>
+          <AlertDescription className="text-[11px] text-muted-foreground leading-relaxed">
+            You are registering as the <strong>Workspace Manager</strong>. You will have full authority over drones, mission control, and team access.
+          </AlertDescription>
+        </Alert>
 
-      {formError ? <FormNotice message={formError} tone="error" /> : null}
+        {formError && (
+          <Alert variant="destructive" className="bg-destructive/10 border-destructive/20">
+            <ShieldAlert className="h-4 w-4" />
+            <AlertDescription className="font-medium text-xs">
+              {formError}
+            </AlertDescription>
+          </Alert>
+        )}
 
-      <form className="auth-form" onSubmit={onSubmit}>
-        <label className="field">
-          <span className="field-label">Your full name</span>
-          <input
-            required
-            autoComplete="name"
-            className="input"
-            data-testid="signup-name-input"
-            minLength={2}
-            placeholder="Alex Rivera"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-          />
-        </label>
-
-        <label className="field">
-          <span className="field-label">Work email</span>
-          <input
-            required
-            autoComplete="email"
-            className="input"
-            data-testid="signup-email-input"
-            inputMode="email"
-            placeholder="you@operations.example"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <span className="muted field-hint">
-            This email will be your Manager login for this workspace.
-          </span>
-        </label>
-
-        <label className="field">
-          <span className="field-label">Password</span>
-          <div className="password-field">
-            <input
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div className="space-y-2">
+            <Label htmlFor="fullName">Manager Full Name</Label>
+            <Input
+              id="fullName"
               required
-              autoComplete="new-password"
-              className="input password-field-input"
-              data-testid="signup-password-input"
-              minLength={8}
-              placeholder="••••••••"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Alex Rivera"
+              minLength={2}
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              className="glass"
             />
-            <button
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              aria-pressed={showPassword}
-              className="button ghost password-toggle"
-              type="button"
-              onClick={() => setShowPassword((current) => !current)}
-            >
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
           </div>
-          <span className="field-hint">{PASSWORD_HINT}</span>
-        </label>
 
-        <label className="field">
-          <span className="field-label">Confirm password</span>
-          <input
-            required
-            autoComplete="new-password"
-            className="input"
-            data-testid="signup-confirm-input"
-            placeholder="Repeat password"
-            type={showPassword ? 'text' : 'password'}
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-          />
-        </label>
+          <div className="space-y-2">
+            <Label htmlFor="email">Work Email</Label>
+            <Input
+              id="email"
+              required
+              type="email"
+              placeholder="alex@operations.sky"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="glass"
+            />
+            <p className="text-[10px] text-muted-foreground italic px-1">
+              Used for workspace administration and secure logins.
+            </p>
+          </div>
 
-        <div className="form-actions auth-form-actions">
-          <button
-            className="button auth-submit"
-            data-testid="signup-submit"
-            disabled={submitting}
-            type="submit"
-          >
-            {submitting
-              ? 'Creating Manager account…'
-              : 'Create Manager account'}
-          </button>
-        </div>
-      </form>
+          <div className="space-y-2">
+            <Label htmlFor="password">Security Password</Label>
+            <div className="relative group">
+              <Input
+                id="password"
+                required
+                minLength={8}
+                placeholder="••••••••"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="glass pr-10"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent text-muted-foreground"
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </Button>
+            </div>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-tighter px-1 font-medium">
+              {PASSWORD_HINT}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Input
+              id="confirmPassword"
+              required
+              placeholder="Repeat entry"
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              className="glass"
+            />
+          </div>
+
+          <div className="pt-4">
+            <Button 
+              className="w-full h-11 text-base font-bold shadow-lg hover:shadow-primary/20 transition-all gap-2" 
+              type="submit"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <span className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Creating Workspace...
+                </span>
+              ) : (
+                <>
+                  <UserPlus size={18} />
+                  Bootstrap Workspace
+                  <ChevronRight size={18} />
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
     </AuthShell>
   );
 }
