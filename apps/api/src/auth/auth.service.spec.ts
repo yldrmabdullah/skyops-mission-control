@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -53,7 +50,7 @@ describe('AuthService', () => {
 
   it('registerManager creates a new Manager', async () => {
     usersRepository.findOne.mockResolvedValue(null);
-    usersRepository.save.mockImplementation(async (u) => u as User);
+    usersRepository.save.mockImplementation((u) => Promise.resolve(u as User));
 
     await service.registerManager({
       email: 'mgr@example.com',
@@ -86,11 +83,13 @@ describe('AuthService', () => {
         workspaceOwnerId: null,
       } as User)
       .mockResolvedValueOnce(null);
-    usersRepository.save.mockImplementation(async (u) => ({
-      ...(u as User),
-      id: 'pilot-1',
-      createdAt: new Date(),
-    }));
+    usersRepository.save.mockImplementation((u) =>
+      Promise.resolve({
+        ...(u as User),
+        id: 'pilot-1',
+        createdAt: new Date(),
+      }),
+    );
 
     const result = await service.createTeamMember('mgr-1', {
       email: 'p@example.com',

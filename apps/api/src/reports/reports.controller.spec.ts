@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { createMockJwtUser } from '../test-utils/mock-jwt-user';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 
@@ -6,7 +7,7 @@ describe('ReportsController', () => {
   let controller: ReportsController;
   let service: ReportsService;
 
-  const mockUser = { userId: 'user-1', fleetOwnerId: 'user-1' };
+  const mockUser = createMockJwtUser();
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,10 +28,10 @@ describe('ReportsController', () => {
   });
 
   it('should delegate to service', async () => {
-    await controller.getFleetHealthReport(mockUser as any);
+    await controller.getFleetHealthReport(mockUser);
     expect(service.getFleetHealthReport).toHaveBeenCalledWith('user-1');
 
-    await controller.getOperationalAnalytics(mockUser as any);
+    await controller.getOperationalAnalytics(mockUser);
     expect(service.getOperationalAnalytics).toHaveBeenCalledWith('user-1');
   });
 });

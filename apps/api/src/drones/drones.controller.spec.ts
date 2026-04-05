@@ -1,18 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { createMockJwtUser } from '../test-utils/mock-jwt-user';
 import { DronesController } from './drones.controller';
 import { DronesService } from './drones.service';
 import { DroneModel } from './entities/drone.entity';
-import { OperatorRole } from '../auth/operator-role.enum';
 
 describe('DronesController', () => {
   let controller: DronesController;
   let service: DronesService;
 
-  const mockUser = {
-    userId: 'user-1',
-    fleetOwnerId: 'user-1',
-    role: OperatorRole.MANAGER,
-  };
+  const mockUser = createMockJwtUser();
   const mockDrone = { id: 'drone-1' };
 
   beforeEach(async () => {
@@ -42,7 +38,7 @@ describe('DronesController', () => {
       model: DroneModel.MAVIC_3_ENTERPRISE,
       lastMaintenanceDate: '2024-01-01',
     };
-    await controller.create(mockUser as any, dto);
+    await controller.create(mockUser, dto);
     expect(service.create).toHaveBeenCalledWith(dto, 'user-1', 'user-1');
   });
 });

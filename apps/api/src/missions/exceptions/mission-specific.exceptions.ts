@@ -25,8 +25,13 @@ export class DroneNotAvailableException extends DomainException {
 
 export class MissionNotFoundException extends DomainException {
   constructor(id: string) {
-    super(`Mission with ID ${id} not found`, 'MISSION_NOT_FOUND', HttpStatus.NOT_FOUND, {
-      id,
-    });
+    super(
+      `Mission with ID ${id} not found`,
+      'MISSION_NOT_FOUND',
+      HttpStatus.NOT_FOUND,
+      {
+        id,
+      },
+    );
   }
 }

@@ -15,7 +15,11 @@ interface ErrorResponse {
   timestamp: string;
   path: string;
   code?: string;
-  details?: any;
+  details?: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 @Catch()
@@ -35,20 +39,35 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const exceptionRes = exception.getResponse() as any;
+      const exceptionRes = exception.getResponse();
+
+      let message: string | string[];
+      if (typeof exceptionRes === 'string') {
+        message = exceptionRes;
+      } else if (isRecord(exceptionRes)) {
+        const msg = exceptionRes.message;
+        message =
+          typeof msg === 'string' || Array.isArray(msg)
+            ? msg
+            : exception.message;
+      } else {
+        message = exception.message;
+      }
 
       errorResponse = {
         ...errorResponse,
         statusCode: status,
         error: exception.name,
-        // If it's a validation error from class-validator it may have an array of messages
-        message: exceptionRes.message || exception.message,
+        message,
       };
 
-      // Support for DomainException fields (code, details)
-      if (typeof exceptionRes === 'object') {
-        if (exceptionRes.code) errorResponse.code = exceptionRes.code;
-        if (exceptionRes.details) errorResponse.details = exceptionRes.details;
+      if (isRecord(exceptionRes)) {
+        if (typeof exceptionRes.code === 'string') {
+          errorResponse.code = exceptionRes.code;
+        }
+        if ('details' in exceptionRes) {
+          errorResponse.details = exceptionRes.details;
+        }
       }
     } else {
       // Unhandled / Internal Server Errors

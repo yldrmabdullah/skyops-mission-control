@@ -5,7 +5,13 @@ import {
   DroneStatus,
 } from '../drones/entities/drone.entity';
 import { Mission, MissionStatus, MissionType } from './entities/mission.entity';
-import { MissionListSortField, MissionListSortOrder } from './dto/mission-list-sort.enum';
+import {
+  MissionListSortField,
+  MissionListSortOrder,
+} from './dto/mission-list-sort.enum';
+import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CreateMissionDto } from './dto/create-mission.dto';
 import { MissionsService } from './missions.service';
 import { DomainException } from '../common/exceptions/domain.exception';
 import {
@@ -15,6 +21,16 @@ import {
 } from './exceptions/mission-specific.exceptions';
 
 const OWNER_ID = '11111111-1111-4111-8111-111111111111';
+
+/** For testing private `assertNoOverlap` without `as any`. */
+interface MissionsServicePrivate {
+  assertNoOverlap(
+    droneId: string,
+    plannedStart: Date,
+    plannedEnd: Date,
+    options?: { excludeMissionId?: string; ownerIdForNotify?: string },
+  ): Promise<void>;
+}
 
 function createMissionRepositoryMock() {
   const queryBuilder = {
@@ -79,8 +95,8 @@ describe('MissionsService', () => {
       dataSource as unknown as DataSource,
       missionsRepository as unknown as Repository<Mission>,
       dronesRepository as unknown as Repository<Drone>,
-      auditService as any,
-      notificationsService as any,
+      auditService as unknown as AuditService,
+      notificationsService as unknown as NotificationsService,
     );
   });
 
@@ -361,9 +377,13 @@ describe('MissionsService', () => {
 
       const result = await service.transition(
         'm1',
-        { status: MissionStatus.ABORTED, abortReason: 'Weather', actualEnd: end.toISOString() },
+        {
+          status: MissionStatus.ABORTED,
+          abortReason: 'Weather',
+          actualEnd: end.toISOString(),
+        },
         OWNER_ID,
-        'u1'
+        'u1',
       );
       expect(result.status).toBe(MissionStatus.ABORTED);
       expect(result.abortReason).toBe('Weather');
@@ -398,9 +418,19 @@ describe('MissionsService', () => {
     });
 
     it('rejects completing a mission if flightHoursLogged is missing', async () => {
-        missionsRepository.findOne.mockResolvedValue({ status: MissionStatus.IN_PROGRESS, droneId: 'd1' } as Mission);
-        dronesRepository.findOne.mockResolvedValue({ id: 'd1' } as Drone);
-        await expect(service.transition('m1', { status: MissionStatus.COMPLETED }, OWNER_ID, 'u1')).rejects.toThrow(DomainException);
+      missionsRepository.findOne.mockResolvedValue({
+        status: MissionStatus.IN_PROGRESS,
+        droneId: 'd1',
+      } as Mission);
+      dronesRepository.findOne.mockResolvedValue({ id: 'd1' } as Drone);
+      await expect(
+        service.transition(
+          'm1',
+          { status: MissionStatus.COMPLETED },
+          OWNER_ID,
+          'u1',
+        ),
+      ).rejects.toThrow(DomainException);
     });
 
     it('throws when transitioning a missing mission', async () => {
@@ -470,66 +500,87 @@ describe('MissionsService', () => {
     });
 
     it('rejects updating non-planned mission', async () => {
-        missionsRepository.findOne.mockResolvedValue({ status: MissionStatus.IN_PROGRESS } as Mission);
-        await expect(service.update('m1', { name: 'New' }, OWNER_ID)).rejects.toThrow(DomainException);
+      missionsRepository.findOne.mockResolvedValue({
+        status: MissionStatus.IN_PROGRESS,
+      } as Mission);
+      await expect(
+        service.update('m1', { name: 'New' }, OWNER_ID),
+      ).rejects.toThrow(DomainException);
     });
 
     it('rejects invalid end date before start date', async () => {
-        const mission = {
-            id: 'm1',
-            status: MissionStatus.PLANNED,
-            plannedStart: new Date(Date.now() + 10000),
-            plannedEnd: new Date(Date.now() + 20000),
-        } as Mission;
-        missionsRepository.findOne.mockResolvedValue(mission);
-        await expect(service.update('m1', { plannedEnd: new Date(Date.now() + 5000).toISOString() }, OWNER_ID)).rejects.toThrow(DomainException);
+      const mission = {
+        id: 'm1',
+        status: MissionStatus.PLANNED,
+        plannedStart: new Date(Date.now() + 10000),
+        plannedEnd: new Date(Date.now() + 20000),
+      } as Mission;
+      missionsRepository.findOne.mockResolvedValue(mission);
+      await expect(
+        service.update(
+          'm1',
+          { plannedEnd: new Date(Date.now() + 5000).toISOString() },
+          OWNER_ID,
+        ),
+      ).rejects.toThrow(DomainException);
     });
   });
 
   describe('completing a mission and maintenance trigger', () => {
     it('completes mission, updates drone and notifies maintenance', async () => {
-        const mission = {
-          id: 'mission-1',
-          droneId: 'drone-1',
-          status: MissionStatus.IN_PROGRESS,
-          drone: { ownerId: OWNER_ID },
-        } as Mission;
-        const drone = {
-          id: 'drone-1',
-          ownerId: OWNER_ID,
-          serialNumber: 'SN001',
-          model: DroneModel.MATRICE_300,
-          status: DroneStatus.IN_MISSION,
-          totalFlightHours: 49,
-          flightHoursAtLastMaintenance: 0,
-          lastMaintenanceDate: new Date('2026-01-01T00:00:00.000Z'),
-          nextMaintenanceDueDate: new Date('2026-12-01T00:00:00.000Z'),
-        } as Drone;
-    
-        missionsRepository.findOne.mockResolvedValue(mission);
-        dronesRepository.findOne.mockResolvedValue(drone);
-    
-        const result = await service.transition(
-          'mission-1',
-          {
-            status: MissionStatus.COMPLETED,
-            flightHoursLogged: 2,
-          },
-          OWNER_ID,
-          OWNER_ID,
-        );
-    
-        expect(result.status).toBe(MissionStatus.COMPLETED);
-        expect(drone.totalFlightHours).toBe(51);
-        expect(notificationsService.notifyMaintenanceDueStub).toHaveBeenCalledWith(OWNER_ID, 'SN001');
-      });
+      const mission = {
+        id: 'mission-1',
+        droneId: 'drone-1',
+        status: MissionStatus.IN_PROGRESS,
+        drone: { ownerId: OWNER_ID },
+      } as Mission;
+      const drone = {
+        id: 'drone-1',
+        ownerId: OWNER_ID,
+        serialNumber: 'SN001',
+        model: DroneModel.MATRICE_300,
+        status: DroneStatus.IN_MISSION,
+        totalFlightHours: 49,
+        flightHoursAtLastMaintenance: 0,
+        lastMaintenanceDate: new Date('2026-01-01T00:00:00.000Z'),
+        nextMaintenanceDueDate: new Date('2026-12-01T00:00:00.000Z'),
+      } as Drone;
+
+      missionsRepository.findOne.mockResolvedValue(mission);
+      dronesRepository.findOne.mockResolvedValue(drone);
+
+      const result = await service.transition(
+        'mission-1',
+        {
+          status: MissionStatus.COMPLETED,
+          flightHoursLogged: 2,
+        },
+        OWNER_ID,
+        OWNER_ID,
+      );
+
+      expect(result.status).toBe(MissionStatus.COMPLETED);
+      expect(drone.totalFlightHours).toBe(51);
+      expect(
+        notificationsService.notifyMaintenanceDueStub,
+      ).toHaveBeenCalledWith(OWNER_ID, 'SN001');
+    });
 
     it('successfully transitions to a status that uses generic persist', async () => {
-      const mission = { id: 'm1', status: MissionStatus.PLANNED, droneId: 'd1' } as Mission;
+      const mission = {
+        id: 'm1',
+        status: MissionStatus.PLANNED,
+        droneId: 'd1',
+      } as Mission;
       missionsRepository.findOne.mockResolvedValue(mission);
       dronesRepository.findOne.mockResolvedValue({ id: 'd1' } as Drone);
-      
-      const result = await service.transition('m1', { status: MissionStatus.PRE_FLIGHT_CHECK }, OWNER_ID, 'u1');
+
+      const result = await service.transition(
+        'm1',
+        { status: MissionStatus.PRE_FLIGHT_CHECK },
+        OWNER_ID,
+        'u1',
+      );
       expect(result.status).toBe(MissionStatus.PRE_FLIGHT_CHECK);
       expect(auditService.record).toHaveBeenCalled();
     });
@@ -538,56 +589,112 @@ describe('MissionsService', () => {
   describe('Internal logic edge cases', () => {
     it('findAll works without search term', async () => {
       await service.findAll({ page: 1, limit: 10 }, OWNER_ID);
-      expect(missionsRepository.__queryBuilder.andWhere).not.toHaveBeenCalledWith(expect.stringContaining('ILIKE'), expect.any(Object));
+      expect(
+        missionsRepository.__queryBuilder.andWhere,
+      ).not.toHaveBeenCalledWith(
+        expect.stringContaining('ILIKE'),
+        expect.any(Object),
+      );
     });
 
     it('update avoids drone validation if droneId is same', async () => {
-      const mission = { id: 'm1', droneId: 'd1', status: MissionStatus.PLANNED, plannedStart: new Date(), plannedEnd: new Date() } as Mission;
+      const mission = {
+        id: 'm1',
+        droneId: 'd1',
+        status: MissionStatus.PLANNED,
+        plannedStart: new Date(),
+        plannedEnd: new Date(),
+      } as Mission;
       missionsRepository.findOne.mockResolvedValue(mission);
       missionsRepository.__queryBuilder.getOne.mockResolvedValue(null);
-      
+
       await service.update('m1', { name: 'New' }, OWNER_ID);
       expect(dronesRepository.findOne).not.toHaveBeenCalled();
     });
 
     it('assertNoOverlap excludes current mission during update', async () => {
-      const mission = { id: 'm1', droneId: 'd1', status: MissionStatus.PLANNED, plannedStart: new Date(), plannedEnd: new Date() } as Mission;
+      const mission = {
+        id: 'm1',
+        droneId: 'd1',
+        status: MissionStatus.PLANNED,
+        plannedStart: new Date(),
+        plannedEnd: new Date(),
+      } as Mission;
       missionsRepository.findOne.mockResolvedValue(mission);
       missionsRepository.__queryBuilder.getOne.mockResolvedValue(null);
-      
+
       await service.update('m1', { name: 'New' }, OWNER_ID);
-      expect(missionsRepository.__queryBuilder.andWhere).toHaveBeenCalledWith('mission.id != :excludeMissionId', { excludeMissionId: 'm1' });
+      expect(missionsRepository.__queryBuilder.andWhere).toHaveBeenCalledWith(
+        'mission.id != :excludeMissionId',
+        { excludeMissionId: 'm1' },
+      );
     });
 
     it('assertNoOverlap throws without notification if ownerIdForNotify is missing', async () => {
-      missionsRepository.__queryBuilder.getOne.mockResolvedValue({ id: 'overlap' });
-      await expect((service as any).assertNoOverlap('d1', new Date(), new Date())).rejects.toThrow();
-      expect(notificationsService.notifyScheduleConflictIfEnabled).not.toHaveBeenCalled();
+      missionsRepository.__queryBuilder.getOne.mockResolvedValue({
+        id: 'overlap',
+      });
+      const privateSvc = service as unknown as MissionsServicePrivate;
+      await expect(
+        privateSvc.assertNoOverlap('d1', new Date(), new Date()),
+      ).rejects.toThrow();
+      expect(
+        notificationsService.notifyScheduleConflictIfEnabled,
+      ).not.toHaveBeenCalled();
     });
 
     it('handles audit service failure silently', async () => {
       const drone = { id: 'd1', status: DroneStatus.AVAILABLE } as Drone;
-      const mission = { id: 'm1', droneId: 'd1', status: MissionStatus.PLANNED } as Mission;
+      const mission = {
+        id: 'm1',
+        droneId: 'd1',
+        status: MissionStatus.PLANNED,
+      } as Mission;
       const futureStart = new Date(Date.now() + 86400000).toISOString();
       const futureEnd = new Date(Date.now() + 90000000).toISOString();
-      
+
       dronesRepository.findOne.mockResolvedValue(drone);
       missionsRepository.create.mockReturnValue(mission);
       missionsRepository.save.mockResolvedValue(mission);
       auditService.record.mockRejectedValue(new Error('Audit Failed'));
-      
-      const result = await service.create({ droneId: 'd1', plannedStart: futureStart, plannedEnd: futureEnd, name: 'Test' } as any, OWNER_ID, 'u1');
+
+      const createDto: CreateMissionDto = {
+        droneId: 'd1',
+        plannedStart: futureStart,
+        plannedEnd: futureEnd,
+        name: 'Test',
+        type: MissionType.WIND_TURBINE_INSPECTION,
+        pilotName: 'Pilot',
+        siteLocation: 'Site',
+      };
+      const result = await service.create(createDto, OWNER_ID, 'u1');
       expect(result).toBeDefined();
     });
 
     it('handles notification service failure silently', async () => {
-      const mission = { id: 'm1', status: MissionStatus.IN_PROGRESS, droneId: 'd1' } as Mission;
-      const drone = { id: 'd1', totalFlightHours: 10, serialNumber: 'SN1', status: DroneStatus.IN_MISSION } as Drone;
+      const mission = {
+        id: 'm1',
+        status: MissionStatus.IN_PROGRESS,
+        droneId: 'd1',
+      } as Mission;
+      const drone = {
+        id: 'd1',
+        totalFlightHours: 10,
+        serialNumber: 'SN1',
+        status: DroneStatus.IN_MISSION,
+      } as Drone;
       missionsRepository.findOne.mockResolvedValue(mission);
       dronesRepository.findOne.mockResolvedValue(drone);
-      notificationsService.notifyMaintenanceDueStub.mockRejectedValue(new Error('Notification Failed'));
-      
-      const result = await service.transition('m1', { status: MissionStatus.COMPLETED, flightHoursLogged: 1 }, OWNER_ID, 'u1');
+      notificationsService.notifyMaintenanceDueStub.mockRejectedValue(
+        new Error('Notification Failed'),
+      );
+
+      const result = await service.transition(
+        'm1',
+        { status: MissionStatus.COMPLETED, flightHoursLogged: 1 },
+        OWNER_ID,
+        'u1',
+      );
       expect(result.status).toBe(MissionStatus.COMPLETED);
     });
   });
