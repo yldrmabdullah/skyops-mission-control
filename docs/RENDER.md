@@ -28,12 +28,15 @@ Render injects these from the Blueprint or the database resource:
 | `NODE_ENV`     | `production`                                                                   |
 | `NODE_VERSION` | `22`                                                                           |
 | `PORT`         | Render sets (e.g. `10000`); Nest uses `process.env.PORT`.                      |
+| `CORS_ORIGIN`  | **Required for browser traffic:** comma-separated origin(s) of the static site, e.g. `https://skyops-mission-control-web.onrender.com`. If unset, the API only allows localhost dev origins (`main.ts`). Blueprint sets this in `render.yaml`. |
 
 The API accepts **either** `DATABASE_URL` **or** discrete `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `DATABASE_NAME` (local Docker). On Render you only need `DATABASE_URL`.
 
 Optional local-style vars: `JWT_EXPIRES_IN` (default in app if unset).
 
 Health check path: `/api/health` (global prefix is `api`, so full path is correct in Blueprint).
+
+**Database / users:** On deploy, TypeORM runs **migrations** only (`migrationsRun: true` in `typeorm.config.ts`). There is **no** automatic Docker-style **seed** on Render. Existing Postgres data is **not** wiped; new migrations alter the schema in place. Demo or manager accounts must be created via **Sign up** (`POST /auth/register`) or by restoring a dump—unless you run a seed script manually against `DATABASE_URL`.
 
 ## Static Site — `VITE_API_BASE_URL`
 
@@ -51,7 +54,7 @@ Rules:
 
 ### CORS
 
-The API calls `enableCors()` without a narrow origin list, so the static site on another `*.onrender.com` host can call the API. For custom domains later, restrict origins in `apps/api/src/main.ts`.
+Origins come from **`CORS_ORIGIN`** (comma-separated). Set the static site’s **exact** `https://…` origin (no path). Custom domains: add the new origin in Render env and redeploy the API.
 
 ## Blueprint quirks (free tier)
 
