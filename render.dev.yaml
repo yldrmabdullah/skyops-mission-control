@@ -36,7 +36,7 @@ services:
     branch: dev
     runtime: static
     rootDir: .
-    buildCommand: corepack enable && export NODE_OPTIONS=--max-old-space-size=460 && pnpm install --frozen-lockfile --filter @skyops/web... && pnpm --filter @skyops/web build
+    buildCommand: corepack enable && export NODE_OPTIONS=--max-old-space-size=460 && if [ -z "$VITE_API_BASE_URL" ]; then echo 'ERROR: VITE_API_BASE_URL must be set'; exit 1; fi && pnpm install --frozen-lockfile --filter @skyops/web... && pnpm --filter @skyops/web build
     staticPublishPath: ./apps/web/dist
     envVars:
       - key: NODE_VERSION

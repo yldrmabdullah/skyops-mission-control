@@ -1,4 +1,4 @@
-import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -27,6 +27,17 @@ function parseCorsOrigins(): string[] {
 }
 
 async function bootstrap() {
+  const bootLogger = new Logger('Bootstrap');
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !process.env.CORS_ORIGIN?.trim()
+  ) {
+    bootLogger.warn(
+      'CORS_ORIGIN is unset — API allows only localhost browser origins. ' +
+        'A hosted SPA (e.g. on Render) will see Network/CORS errors until you set CORS_ORIGIN to the static site origin.',
+    );
+  }
+
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api', {
     exclude: [{ path: '/', method: RequestMethod.GET }],

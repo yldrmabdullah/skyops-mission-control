@@ -14,92 +14,84 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { OperatorRole } from '../auth/operator-role.enum';
-import type { JwtPayloadUser } from '../auth/strategies/jwt.strategy';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
 import { TransitionMissionDto } from './dto/transition-mission.dto';
 import { UpdateMissionDto } from './dto/update-mission.dto';
-import { MissionsService } from './missions.service';
+import { CreateMissionUseCase } from './use-cases/create-mission.use-case';
+import { ListMissionsUseCase } from './use-cases/list-missions.use-case';
+import { GetMissionUseCase } from './use-cases/get-mission.use-case';
+import { UpdateMissionUseCase } from './use-cases/update-mission.use-case';
+import { TransitionMissionUseCase } from './use-cases/transition-mission.use-case';
+import { Audit } from '../common/audit/audit.decorator';
 
 @ApiTags('Missions')
 @ApiBearerAuth('access-token')
 @Controller('missions')
 export class MissionsController {
-  constructor(private readonly missionsService: MissionsService) {}
+  constructor(
+    private readonly createMission: CreateMissionUseCase,
+    private readonly listMissions: ListMissionsUseCase,
+    private readonly getMission: GetMissionUseCase,
+    private readonly updateMission: UpdateMissionUseCase,
+    private readonly transitionMission: TransitionMissionUseCase,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Schedule a mission' })
+  @Audit({ action: 'MISSION_CREATED', entityType: 'Mission' })
   @ApiResponse({ status: 201, description: 'Mission created' })
   @ApiResponse({ status: 400, description: 'Validation or overlap' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
   @Roles(OperatorRole.PILOT, OperatorRole.MANAGER)
-  create(
-    @CurrentUser() user: JwtPayloadUser,
-    @Body() createMissionDto: CreateMissionDto,
-  ) {
-    return this.missionsService.create(
-      createMissionDto,
-      user.fleetOwnerId,
-      user.userId,
-    );
+  create(@Body() createMissionDto: CreateMissionDto) {
+    return this.createMission.execute(createMissionDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List missions for the operator fleet' })
   @ApiResponse({ status: 200, description: 'Paginated missions' })
-  findAll(
-    @CurrentUser() user: JwtPayloadUser,
-    @Query() query: ListMissionsQueryDto,
-  ) {
-    return this.missionsService.findAll(query, user.fleetOwnerId);
+  findAll(@Query() query: ListMissionsQueryDto) {
+    return this.listMissions.execute(query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get one mission' })
   @ApiResponse({ status: 200, description: 'Mission detail' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  findOne(
-    @CurrentUser() user: JwtPayloadUser,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.missionsService.findOne(id, user.fleetOwnerId);
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.getMission.execute(id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a planned mission' })
+  @Audit({ action: 'MISSION_UPDATED', entityType: 'Mission' })
   @ApiResponse({ status: 200, description: 'Updated mission' })
   @ApiResponse({ status: 400, description: 'Not editable state' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @Roles(OperatorRole.PILOT, OperatorRole.MANAGER)
   update(
-    @CurrentUser() user: JwtPayloadUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateMissionDto: UpdateMissionDto,
   ) {
-    return this.missionsService.update(id, updateMissionDto, user.fleetOwnerId);
+    return this.updateMission.execute(id, updateMissionDto);
   }
 
   @Patch(':id/transition')
   @ApiOperation({ summary: 'Transition mission status' })
+  @Audit({ action: 'MISSION_TRANSITIONED', entityType: 'Mission' })
   @ApiResponse({ status: 200, description: 'Updated mission' })
   @ApiResponse({ status: 400, description: 'Invalid transition' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @Roles(OperatorRole.PILOT, OperatorRole.MANAGER)
   transition(
-    @CurrentUser() user: JwtPayloadUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() transitionMissionDto: TransitionMissionDto,
   ) {
-    return this.missionsService.transition(
-      id,
-      transitionMissionDto,
-      user.fleetOwnerId,
-      user.userId,
-    );
+    return this.transitionMission.execute(id, transitionMissionDto);
   }
 }
