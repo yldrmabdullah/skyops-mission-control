@@ -1,4 +1,5 @@
 import { DroneStatus } from '../drones/entities/drone.entity';
+import { MissionStatus } from '../missions/entities/mission.entity';
 import { ReportsService } from './reports.service';
 import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
 import { IMissionsRepository } from '../missions/repositories/missions.repository.interface';
@@ -73,6 +74,14 @@ describe('ReportsService', () => {
 
     const missionsRepository: Partial<IMissionsRepository> = {
       countByDroneId: jest.fn().mockResolvedValue(0),
+      findAll: jest.fn().mockResolvedValue([
+        [
+          { status: MissionStatus.PLANNED },
+          { status: MissionStatus.PLANNED },
+          { status: MissionStatus.COMPLETED },
+        ],
+        3,
+      ]),
     };
 
     const maintenanceLogsRepository: Partial<IMaintenanceLogsRepository> = {
@@ -89,5 +98,9 @@ describe('ReportsService', () => {
     const analytics = await service.getOperationalAnalytics();
 
     expect(analytics.droneModelBreakdown).toEqual({ MATRICE_300: 2 });
+    expect(analytics.missionStatusBreakdown).toEqual({
+      PLANNED: 2,
+      COMPLETED: 1,
+    });
   });
 });

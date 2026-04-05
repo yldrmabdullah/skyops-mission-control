@@ -77,7 +77,9 @@ Domain modules (each with entities, DTOs, controllers, services):
 | `drones`      | CRUD, serial validation, status rules, retirement guards, maintenance field calculations                                                              |
 | `missions`    | Scheduling, overlap checks, state machine, completion updates flight hours and maintenance                                                            |
 | `maintenance` | Maintenance log CRUD; recalculates drone maintenance fields                                                                                           |
-| `reports`     | Fleet health aggregate (overdue maintenance, missions in next window, etc.)                                                                           |
+| `reports`     | Fleet health and operational analytics aggregates                                                                                                    |
+| `notifications` | In-app notifications (schedule conflicts, maintenance due, etc.) for workspace members                                                          |
+| `audit`       | Immutable-style **audit events** for key actions; list API powers the **Audit log** UI                                                                 |
 
 Cross-cutting: global `ValidationPipe`, HTTP exception filter, TypeORM migrations (no `synchronize` in production paths), `/api/health` for probes.
 
@@ -122,7 +124,7 @@ Database: PostgreSQL **16** in `docker-compose` (image `postgres:16-alpine`).
 ├── apps
 │   ├── api     # NestJS REST API (@skyops/api)
 │   └── web     # React dashboard (@skyops/web)
-├── docs            # e.g. BRANCHING.md
+├── docs            # BRANCHING.md, RENDER.md
 ├── scripts         # Local / CI helpers (e.g. e2e API + web startup)
 ├── render.yaml     # Production Blueprint (branch: master)
 ├── render.dev.yaml # Staging Blueprint (branch: dev)
@@ -346,6 +348,8 @@ The seed script wipes **drones, missions, maintenance logs, in-app notifications
 
 Re-run seed anytime to refresh demo content (destructive for the tables listed above).
 
+On **Render** (or any remote Postgres), demo users are **not** created automatically. Use **`pnpm --filter @skyops/api seed:demo-users`** from your machine with **`DATABASE_URL`** set to the DB’s **external** connection string, or run the full **`seed`** — see [docs/RENDER.md](docs/RENDER.md).
+
 ## API surface
 
 **Health**
@@ -369,7 +373,9 @@ Re-run seed anytime to refresh demo content (destructive for the tables listed a
 - `GET/POST /api/drones` (list supports `sortBy` / `sortOrder` on serial, model, status, flight hours, next maintenance due, registered date), `GET/PATCH/DELETE /api/drones/:id`
 - `GET/POST /api/missions`, `GET/PATCH /api/missions/:id`, `PATCH /api/missions/:id/transition`
 - `GET/POST /api/maintenance-logs`
-- `GET /api/reports/fleet-health`
+- `GET /api/notifications/in-app`, `PATCH /api/notifications/in-app/:id/read` — in-app notification list and mark read
+- `GET /api/audit-events` — paginated operational audit log (UI **Audit**)
+- `GET /api/reports/fleet-health`, `GET /api/reports/operational-analytics`
 
 ## CI
 

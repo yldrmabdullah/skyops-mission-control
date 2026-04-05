@@ -188,6 +188,7 @@ export function DateInput({
         selected={selected}
         onSelect={handleDaySelect}
         showOutsideDays
+        weekStartsOn={1}
       />
 
       {type === 'datetime-local' ? (
