@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DronesController } from './drones.controller';
 import { DronesService } from './drones.service';
+import { CreateDroneDto } from './dto/create-drone.dto';
 import { DroneModel } from './entities/drone.entity';
 
 describe('DronesController', () => {
@@ -36,7 +37,7 @@ describe('DronesController', () => {
       model: DroneModel.MAVIC_3_ENTERPRISE,
       lastMaintenanceDate: '2024-01-01',
     };
-    await controller.create(dto as any);
+    await controller.create(dto as CreateDroneDto);
     expect(service.create).toHaveBeenCalledWith(dto);
   });
 });

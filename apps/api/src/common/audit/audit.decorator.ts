@@ -8,7 +8,8 @@ export interface AuditOptions {
   /**
    * Optional function to extract entityId from the result or arguments
    */
-  extractEntityId?: (result: any) => string;
+  extractEntityId?: (result: unknown) => string;
 }
 
-export const Audit = (options: AuditOptions) => SetMetadata(AUDIT_METADATA_KEY, options);
+export const Audit = (options: AuditOptions) =>
+  SetMetadata(AUDIT_METADATA_KEY, options);

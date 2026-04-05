@@ -7,7 +7,7 @@ export class GetMissionUseCase {
   constructor(
     private readonly missionsRepository: IMissionsRepository,
     private readonly workspaceContext: WorkspaceContext,
-  ) { }
+  ) {}
 
   async execute(id: string) {
     const fleetOwnerId = this.workspaceContext.fleetOwnerId;

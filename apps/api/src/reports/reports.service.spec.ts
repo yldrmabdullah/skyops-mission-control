@@ -1,4 +1,4 @@
-import { Drone, DroneStatus } from '../drones/entities/drone.entity';
+import { DroneStatus } from '../drones/entities/drone.entity';
 import { ReportsService } from './reports.service';
 import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
 import { IMissionsRepository } from '../missions/repositories/missions.repository.interface';

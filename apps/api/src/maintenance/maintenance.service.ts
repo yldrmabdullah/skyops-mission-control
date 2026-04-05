@@ -11,16 +11,10 @@ import { IDronesRepository } from '../drones/repositories/drones.repository.inte
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { createReadStream } from 'fs';
-import {
-  buildPaginationMeta,
-} from '../common/utils/pagination';
-import { parseIsoDateOrThrow } from '../common/utils/date.utils';
+import { buildPaginationMeta } from '../common/utils/pagination';
 import { CreateMaintenanceLogDto } from './dto/create-maintenance-log.dto';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
-import {
-  MaintenanceAttachment,
-  MaintenanceLog,
-} from './entities/maintenance-log.entity';
+import { MaintenanceAttachment } from './entities/maintenance-log.entity';
 import { ListMaintenanceLogsQueryDto } from './dto/list-maintenance-logs-query.dto';
 import { extname, join, basename } from 'path';
 import { randomUUID } from 'crypto';
@@ -53,7 +47,10 @@ export class MaintenanceService {
       );
     }
 
-    MaintenanceService.assertCreatePreconditions(drone, createMaintenanceLogDto);
+    MaintenanceService.assertCreatePreconditions(
+      drone,
+      createMaintenanceLogDto,
+    );
 
     const urlAttachments: MaintenanceAttachment[] = (
       createMaintenanceLogDto.attachmentUrls ?? []
@@ -63,7 +60,8 @@ export class MaintenanceService {
       droneId: drone.id,
       type: createMaintenanceLogDto.type,
       performedAt: new Date(createMaintenanceLogDto.performedAt),
-      flightHoursAtMaintenance: createMaintenanceLogDto.flightHoursAtMaintenance,
+      flightHoursAtMaintenance:
+        createMaintenanceLogDto.flightHoursAtMaintenance,
       technicianName: createMaintenanceLogDto.technicianName,
       notes: createMaintenanceLogDto.notes ?? null,
       attachments: urlAttachments,
@@ -124,7 +122,10 @@ export class MaintenanceService {
   private static readonly STORED_FILE_NAME_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(\.[^./\\]+)?$/i;
 
-  async getAttachmentFile(logId: string, rawFileName: string): Promise<StreamableFile> {
+  async getAttachmentFile(
+    logId: string,
+    rawFileName: string,
+  ): Promise<StreamableFile> {
     const fleetOwnerId = this.workspaceContext.fleetOwnerId;
     const storedFileName = basename(rawFileName);
     if (
@@ -162,14 +163,17 @@ export class MaintenanceService {
 
   async findAll(query: ListMaintenanceLogsQueryDto) {
     const fleetOwnerId = this.workspaceContext.fleetOwnerId;
-    
-    const [data, total] = await this.maintenanceLogsRepository.findAll(fleetOwnerId, {
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-      droneId: query.droneId,
-      startDate: query.startDate,
-      endDate: query.endDate,
-    });
+
+    const [data, total] = await this.maintenanceLogsRepository.findAll(
+      fleetOwnerId,
+      {
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        droneId: query.droneId,
+        startDate: query.startDate,
+        endDate: query.endDate,
+      },
+    );
 
     return {
       data,

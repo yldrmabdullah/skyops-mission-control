@@ -82,13 +82,18 @@ export class Drone {
   maintenanceLogs!: MaintenanceLog[];
 
   isMaintenanceDue(currentDate = new Date()): boolean {
-    const hoursSinceMaintenance = Number((this.totalFlightHours - this.flightHoursAtLastMaintenance).toFixed(1));
-    return hoursSinceMaintenance >= 50 || this.nextMaintenanceDueDate.getTime() <= currentDate.getTime();
+    const hoursSinceMaintenance = Number(
+      (this.totalFlightHours - this.flightHoursAtLastMaintenance).toFixed(1),
+    );
+    return (
+      hoursSinceMaintenance >= 50 ||
+      this.nextMaintenanceDueDate.getTime() <= currentDate.getTime()
+    );
   }
 
   isMaintenanceWatchlistCandidate(currentDate = new Date()): boolean {
     if (this.isMaintenanceDue(currentDate)) return true;
-    
+
     // Within 7 days
     const threshold = new Date(currentDate);
     threshold.setUTCDate(threshold.getUTCDate() + 7);

@@ -22,11 +22,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { OperatorRole } from '../auth/operator-role.enum';
-import type { JwtPayloadUser } from '../auth/strategies/jwt.strategy';
 import { CreateMaintenanceLogDto } from './dto/create-maintenance-log.dto';
 import { ListMaintenanceLogsQueryDto } from './dto/list-maintenance-logs-query.dto';
 import { MaintenanceService } from './maintenance.service';

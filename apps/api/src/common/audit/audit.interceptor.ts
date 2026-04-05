@@ -11,6 +11,33 @@ import { AuditService } from '../../audit/audit.service';
 import { WorkspaceContext } from '../workspace-context/workspace-context';
 import { AUDIT_METADATA_KEY, AuditOptions } from './audit.decorator';
 
+function extractAuditEntityId(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') {
+    return undefined;
+  }
+  const row = result as Record<string, unknown>;
+  const id = row['id'];
+  const uuid = row['uuid'];
+  if (typeof id === 'string') {
+    return id;
+  }
+  if (typeof uuid === 'string') {
+    return uuid;
+  }
+  return undefined;
+}
+
+function extractAuditMetadata(result: unknown): Record<string, unknown> {
+  if (!result || typeof result !== 'object' || !('metadata' in result)) {
+    return {};
+  }
+  const meta = (result as { metadata?: unknown }).metadata;
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    return meta as Record<string, unknown>;
+  }
+  return {};
+}
+
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   constructor(
@@ -30,24 +57,30 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      tap(async (result) => {
-        // If we have an initialized workspace context, record the audit log
-        if (this.workspaceContext.isInitialized) {
-          const entityId = options.extractEntityId 
-            ? options.extractEntityId(result) 
-            : (result?.id || result?.uuid);
-
-          if (entityId) {
-            void this.auditService.record(
-              this.workspaceContext.actorId,
-              options.action,
-              options.entityType,
-              entityId,
-              // We could potentially add more metadata here from result
-              result?.metadata || {}
-            ).catch(() => {});
-          }
+      tap((result: unknown) => {
+        if (!this.workspaceContext.isInitialized) {
+          return;
         }
+
+        const entityId = options.extractEntityId
+          ? options.extractEntityId(result)
+          : extractAuditEntityId(result);
+
+        if (!entityId) {
+          return;
+        }
+
+        const metadata = extractAuditMetadata(result);
+
+        void this.auditService
+          .record(
+            this.workspaceContext.actorId,
+            options.action,
+            options.entityType,
+            entityId,
+            metadata,
+          )
+          .catch(() => {});
       }),
     );
   }

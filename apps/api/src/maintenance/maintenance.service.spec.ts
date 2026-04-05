@@ -2,10 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { Drone, DroneStatus } from '../drones/entities/drone.entity';
-import {
-  MaintenanceLog,
-  MaintenanceType,
-} from './entities/maintenance-log.entity';
+import { MaintenanceType } from './entities/maintenance-log.entity';
 import { MaintenanceService } from './maintenance.service';
 import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
 import { IMaintenanceLogsRepository } from './repositories/maintenance-logs.repository.interface';
@@ -13,7 +10,7 @@ import { WorkspaceContext } from '../common/workspace-context/workspace-context'
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
-  let dataSource: any;
+  let dataSource: DataSource;
 
   const ownerId = '11111111-1111-4111-8111-111111111111';
   const droneId = '22222222-2222-4222-8222-222222222222';
@@ -37,14 +34,18 @@ describe('MaintenanceService', () => {
 
     dataSource = {
       transaction: jest.fn(
-        async (fn: (m: { save: jest.Mock }) => Promise<unknown>) => {
+        async (
+          fn: (m: {
+            save: (e: unknown) => Promise<unknown>;
+          }) => Promise<unknown>,
+        ) => {
           const manager = {
             save: jest.fn((entity: unknown) => Promise.resolve(entity)),
           };
-          return fn(manager as any);
+          return fn(manager);
         },
       ),
-    };
+    } as unknown as DataSource;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,7 +54,10 @@ describe('MaintenanceService', () => {
         {
           provide: IMaintenanceLogsRepository,
           useValue: {
-            create: jest.fn((payload: any) => ({ ...payload, id: 'log-1' })),
+            create: jest.fn((payload: Record<string, unknown>) => ({
+              ...payload,
+              id: 'log-1',
+            })),
             findAll: jest.fn().mockResolvedValue([[], 0]),
             findOne: jest.fn(),
             save: jest.fn(),

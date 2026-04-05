@@ -24,8 +24,14 @@ export enum MissionStatus {
 }
 
 const MISSION_TRANSITIONS: Record<MissionStatus, MissionStatus[]> = {
-  [MissionStatus.PLANNED]: [MissionStatus.PRE_FLIGHT_CHECK, MissionStatus.ABORTED],
-  [MissionStatus.PRE_FLIGHT_CHECK]: [MissionStatus.IN_PROGRESS, MissionStatus.ABORTED],
+  [MissionStatus.PLANNED]: [
+    MissionStatus.PRE_FLIGHT_CHECK,
+    MissionStatus.ABORTED,
+  ],
+  [MissionStatus.PRE_FLIGHT_CHECK]: [
+    MissionStatus.IN_PROGRESS,
+    MissionStatus.ABORTED,
+  ],
   [MissionStatus.IN_PROGRESS]: [MissionStatus.COMPLETED, MissionStatus.ABORTED],
   [MissionStatus.COMPLETED]: [],
   [MissionStatus.ABORTED]: [],
@@ -87,7 +93,9 @@ export class Mission {
 
   assertCanTransitionTo(nextStatus: MissionStatus) {
     if (!MISSION_TRANSITIONS[this.status].includes(nextStatus)) {
-      throw new Error(`Mission cannot transition from ${this.status} to ${nextStatus}.`);
+      throw new Error(
+        `Mission cannot transition from ${this.status} to ${nextStatus}.`,
+      );
     }
   }
 }
