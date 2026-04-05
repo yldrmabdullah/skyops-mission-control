@@ -14,8 +14,10 @@ import {
   MissionStatus,
   MissionType,
 } from '../src/missions/entities/mission.entity';
+import { AuditService } from '../src/audit/audit.service';
 import { CreateMissionUseCase } from '../src/missions/use-cases/create-mission.use-case';
 import { TransitionMissionUseCase } from '../src/missions/use-cases/transition-mission.use-case';
+import { NotificationsService } from '../src/notifications/notifications.service';
 import { TypeOrmMissionsRepository } from '../src/missions/repositories/typeorm-missions.repository';
 import { TypeOrmDronesRepository } from '../src/drones/repositories/typeorm-drones.repository';
 import { TypeOrmMaintenanceLogsRepository } from '../src/maintenance/repositories/typeorm-maintenance-logs.repository';
@@ -78,18 +80,21 @@ describe('Mission lifecycle integration', () => {
       userId: ownerId,
     } as WorkspaceContext;
 
-    const auditService = { record: jest.fn().mockResolvedValue(undefined) } as any;
+    const auditService = {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService;
     const notificationsService = {
       notifyScheduleConflictIfEnabled: jest.fn().mockResolvedValue(undefined),
       notifyMaintenanceDueStub: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    } as unknown as NotificationsService;
 
     const missionsRepo = new TypeOrmMissionsRepository(missionRepository);
     const dronesRepo = new TypeOrmDronesRepository(droneRepository);
-    const maintRepo = new TypeOrmMaintenanceLogsRepository(maintenanceLogRepository);
+    const maintRepo = new TypeOrmMaintenanceLogsRepository(
+      maintenanceLogRepository,
+    );
 
     dronesService = new DronesService(
-      dataSource,
       dronesRepo,
       missionsRepo,
       maintRepo,
@@ -143,10 +148,13 @@ describe('Mission lifecycle integration', () => {
     await transitionMissionUseCase.execute(mission.id, {
       status: MissionStatus.IN_PROGRESS,
     });
-    const completedMission = await transitionMissionUseCase.execute(mission.id, {
-      status: MissionStatus.COMPLETED,
-      flightHoursLogged: 2,
-    });
+    const completedMission = await transitionMissionUseCase.execute(
+      mission.id,
+      {
+        status: MissionStatus.COMPLETED,
+        flightHoursLogged: 2,
+      },
+    );
 
     const updatedDrone = await dataSource.getRepository(Drone).findOneByOrFail({
       id: drone.id,

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { IMissionsRepository } from '../repositories/missions.repository.interface';
 import { WorkspaceContext } from '../../common/workspace-context/workspace-context';
 import { UpdateMissionDto } from '../dto/update-mission.dto';
@@ -27,9 +31,11 @@ export class UpdateMissionUseCase {
       throw new ConflictException('Only planned missions can be updated.');
     }
 
-    const droneId = dto.droneId ?? mission.droneId;
     if (dto.droneId && dto.droneId !== mission.droneId) {
-      const nextDrone = await this.dronesRepository.findOne(dto.droneId, fleetOwnerId);
+      const nextDrone = await this.dronesRepository.findOne(
+        dto.droneId,
+        fleetOwnerId,
+      );
       if (!nextDrone) {
         throw new NotFoundException(`Drone ${dto.droneId} was not found.`);
       }
@@ -40,16 +46,29 @@ export class UpdateMissionUseCase {
     }
 
     if (dto.plannedStart || dto.plannedEnd || dto.droneId) {
-      const start = dto.plannedStart ? parseIsoDateOrThrow(dto.plannedStart, 'Planned start') : mission.plannedStart;
-      const end = dto.plannedEnd ? parseIsoDateOrThrow(dto.plannedEnd, 'Planned end') : mission.plannedEnd;
+      const start = dto.plannedStart
+        ? parseIsoDateOrThrow(dto.plannedStart, 'Planned start')
+        : mission.plannedStart;
+      const end = dto.plannedEnd
+        ? parseIsoDateOrThrow(dto.plannedEnd, 'Planned end')
+        : mission.plannedEnd;
 
       if (start >= end) {
-        throw new ConflictException('Planned start must be before planned end.');
+        throw new ConflictException(
+          'Planned start must be before planned end.',
+        );
       }
 
-      const overlap = await this.missionsRepository.findOverlapping(mission.droneId, start, end, id);
+      const overlap = await this.missionsRepository.findOverlapping(
+        mission.droneId,
+        start,
+        end,
+        id,
+      );
       if (overlap) {
-        throw new ConflictException('This drone already has another mission scheduled during this time window.');
+        throw new ConflictException(
+          'This drone already has another mission scheduled during this time window.',
+        );
       }
 
       mission.plannedStart = start;

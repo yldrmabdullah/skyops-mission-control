@@ -1,8 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThanOrEqual, MoreThanOrEqual, Not, Repository, ILike, In } from 'typeorm';
+import type { DeepPartial } from 'typeorm';
+import {
+  Between,
+  FindOptionsWhere,
+  In,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Not,
+  Repository,
+} from 'typeorm';
 import { Mission, MissionStatus } from '../entities/mission.entity';
-import { IMissionsRepository } from './missions.repository.interface';
+import {
+  IMissionsRepository,
+  MissionListQueryOptions,
+} from './missions.repository.interface';
 
 @Injectable()
 export class TypeOrmMissionsRepository implements IMissionsRepository {
@@ -12,28 +24,35 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
   ) {}
 
   async findOne(id: string, ownerId: string): Promise<Mission | null> {
-    return this.repository.findOne({ 
+    return this.repository.findOne({
       where: { id, drone: { ownerId } },
-      relations: { drone: true }
+      relations: { drone: true },
     });
   }
 
-  async findOverlapping(droneId: string, start: Date, end: Date, excludeId?: string): Promise<Mission | null> {
-    const where: any = {
+  async findOverlapping(
+    droneId: string,
+    start: Date,
+    end: Date,
+    excludeId?: string,
+  ): Promise<Mission | null> {
+    const base: FindOptionsWhere<Mission> = {
       droneId,
       plannedStart: LessThanOrEqual(end),
       plannedEnd: MoreThanOrEqual(start),
     };
-
-    if (excludeId) {
-      where.id = Not(excludeId);
-    }
+    const where: FindOptionsWhere<Mission> = excludeId
+      ? { ...base, id: Not(excludeId) }
+      : base;
 
     return this.repository.findOne({ where });
   }
 
-  async findAll(ownerId: string, options: any): Promise<[Mission[], number]> {
-    const where: any = { drone: { ownerId } };
+  async findAll(
+    ownerId: string,
+    options: MissionListQueryOptions,
+  ): Promise<[Mission[], number]> {
+    const where: FindOptionsWhere<Mission> = { drone: { ownerId } };
 
     if (options.status) {
       where.status = options.status;
@@ -45,7 +64,10 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
 
     if (options.startDate || options.endDate) {
       if (options.startDate && options.endDate) {
-        where.plannedStart = Between(new Date(options.startDate), new Date(options.endDate));
+        where.plannedStart = Between(
+          new Date(options.startDate),
+          new Date(options.endDate),
+        );
       } else if (options.startDate) {
         where.plannedStart = MoreThanOrEqual(new Date(options.startDate));
       } else if (options.endDate) {
@@ -58,7 +80,7 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
       skip: options.skip,
       take: options.take,
       relations: { drone: true },
-      order: options.order || { plannedStart: 'ASC' }
+      order: options.order ?? { plannedStart: 'ASC' },
     });
   }
 
@@ -66,7 +88,7 @@ export class TypeOrmMissionsRepository implements IMissionsRepository {
     return this.repository.save(mission);
   }
 
-  create(props: any): Mission {
+  create(props: DeepPartial<Mission>): Mission {
     return this.repository.create(props) as unknown as Mission;
   }
 

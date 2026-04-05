@@ -21,21 +21,14 @@ import {
 import { ListDronesQueryDto } from './dto/list-drones-query.dto';
 import { UpdateDroneDto } from './dto/update-drone.dto';
 import { Drone, DroneStatus } from './entities/drone.entity';
-import {
-  calculateNextMaintenanceDueDate,
-  isMaintenanceDue,
-  isMaintenanceWatchlistCandidate,
-} from './utils/maintenance.utils';
+import { calculateNextMaintenanceDueDate } from './utils/maintenance.utils';
 import {
   assertDroneCanBeDeleted,
   assertDroneCanBeRetired,
   assertValidFlightHoursSnapshot,
 } from './utils/drone-rules';
-import { DataSource, In } from 'typeorm';
 
-function resolveDroneListOrder(
-  query: ListDronesQueryDto,
-) {
+function resolveDroneListOrder(query: ListDronesQueryDto) {
   const field = query.sortBy ?? DroneListSortField.REGISTERED_AT;
   const direction =
     query.sortOrder ??
@@ -48,7 +41,6 @@ function resolveDroneListOrder(
 @Injectable()
 export class DronesService {
   constructor(
-    private readonly dataSource: DataSource,
     private readonly dronesRepository: IDronesRepository,
     private readonly missionsRepository: IMissionsRepository,
     private readonly maintenanceLogsRepository: IMaintenanceLogsRepository,
@@ -204,7 +196,8 @@ export class DronesService {
       throw new NotFoundException(`Drone ${id} was not found.`);
     }
 
-    const relatedMissionCount = await this.missionsRepository.countByDroneId(id);
+    const relatedMissionCount =
+      await this.missionsRepository.countByDroneId(id);
     const relatedMaintenanceLogCount =
       await this.maintenanceLogsRepository.countByDroneId(id);
 
@@ -244,7 +237,8 @@ export class DronesService {
       return;
     }
 
-    const activeMission = await this.missionsRepository.findActiveOnDrone(droneId);
+    const activeMission =
+      await this.missionsRepository.findActiveOnDrone(droneId);
 
     assertDroneCanBeRetired(activeMission);
   }

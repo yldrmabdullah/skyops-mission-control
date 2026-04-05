@@ -5,6 +5,10 @@ import { ListMissionsUseCase } from './use-cases/list-missions.use-case';
 import { GetMissionUseCase } from './use-cases/get-mission.use-case';
 import { UpdateMissionUseCase } from './use-cases/update-mission.use-case';
 import { TransitionMissionUseCase } from './use-cases/transition-mission.use-case';
+import { CreateMissionDto } from './dto/create-mission.dto';
+import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
+import { TransitionMissionDto } from './dto/transition-mission.dto';
+import { UpdateMissionDto } from './dto/update-mission.dto';
 import { MissionStatus, MissionType } from './entities/mission.entity';
 
 describe('MissionsController', () => {
@@ -15,7 +19,7 @@ describe('MissionsController', () => {
   let updateMission: UpdateMissionUseCase;
   let transitionMission: TransitionMissionUseCase;
 
-  const createDto = {
+  const createDto: CreateMissionDto = {
     name: 'Mission',
     type: MissionType.WIND_TURBINE_INSPECTION,
     droneId: 'd1',
@@ -42,23 +46,30 @@ describe('MissionsController', () => {
     listMissions = module.get<ListMissionsUseCase>(ListMissionsUseCase);
     getMission = module.get<GetMissionUseCase>(GetMissionUseCase);
     updateMission = module.get<UpdateMissionUseCase>(UpdateMissionUseCase);
-    transitionMission = module.get<TransitionMissionUseCase>(TransitionMissionUseCase);
+    transitionMission = module.get<TransitionMissionUseCase>(
+      TransitionMissionUseCase,
+    );
   });
 
   it('should delegate to use cases for all methods', async () => {
-    await controller.create(createDto as any);
+    await controller.create(createDto);
     expect(createMission.execute).toHaveBeenCalledWith(createDto);
 
-    await controller.findAll({ page: 1, limit: 10 } as any);
+    const listQuery: ListMissionsQueryDto = { page: 1, limit: 10 };
+    await controller.findAll(listQuery);
     expect(listMissions.execute).toHaveBeenCalled();
 
     await controller.findOne('m1');
     expect(getMission.execute).toHaveBeenCalledWith('m1');
 
-    await controller.update('m1', {} as any);
-    expect(updateMission.execute).toHaveBeenCalledWith('m1', {});
+    const updateDto = {} as UpdateMissionDto;
+    await controller.update('m1', updateDto);
+    expect(updateMission.execute).toHaveBeenCalledWith('m1', updateDto);
 
-    await controller.transition('m1', { status: MissionStatus.PRE_FLIGHT_CHECK } as any);
-    expect(transitionMission.execute).toHaveBeenCalledWith('m1', { status: MissionStatus.PRE_FLIGHT_CHECK });
+    const transitionDto: TransitionMissionDto = {
+      status: MissionStatus.PRE_FLIGHT_CHECK,
+    };
+    await controller.transition('m1', transitionDto);
+    expect(transitionMission.execute).toHaveBeenCalledWith('m1', transitionDto);
   });
 });
