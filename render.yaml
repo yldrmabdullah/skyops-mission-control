@@ -29,6 +29,9 @@ services:
         value: 22
       - key: PORT
         value: 10000
+      # Browser origin of the static site (required: unset CORS falls back to localhost-only).
+      - key: CORS_ORIGIN
+        value: https://skyops-mission-control-web.onrender.com
   # Static sites: do not set plan: free here — Render rejects it for runtime: static (use default / dashboard if needed).
   - type: web
     name: skyops-mission-control-web
