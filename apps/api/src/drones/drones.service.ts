@@ -5,7 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, ILike, In, Not, Repository } from 'typeorm';
+import {
+  FindOptionsOrder,
+  FindOptionsWhere,
+  ILike,
+  In,
+  Not,
+  Repository,
+} from 'typeorm';
 import { parseIsoDateOrThrow } from '../common/utils/date.utils';
 import { AuditService } from '../audit/audit.service';
 import { OperatorRole } from '../auth/operator-role.enum';
@@ -13,6 +20,10 @@ import { buildPaginationMeta } from '../common/utils/pagination';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
 import { Mission, MissionStatus } from '../missions/entities/mission.entity';
 import { CreateDroneDto } from './dto/create-drone.dto';
+import {
+  DroneListSortField,
+  DroneListSortOrder,
+} from './dto/drone-list-sort.enum';
 import { ListDronesQueryDto } from './dto/list-drones-query.dto';
 import { UpdateDroneDto } from './dto/update-drone.dto';
 import { Drone, DroneStatus } from './entities/drone.entity';
@@ -26,6 +37,18 @@ import {
   assertDroneCanBeRetired,
   assertValidFlightHoursSnapshot,
 } from './utils/drone-rules';
+
+function resolveDroneListOrder(
+  query: ListDronesQueryDto,
+): FindOptionsOrder<Drone> {
+  const field = query.sortBy ?? DroneListSortField.REGISTERED_AT;
+  const direction =
+    query.sortOrder ??
+    (field === DroneListSortField.REGISTERED_AT
+      ? DroneListSortOrder.DESC
+      : DroneListSortOrder.ASC);
+  return { [field]: direction };
+}
 
 @Injectable()
 export class DronesService {
@@ -45,7 +68,10 @@ export class DronesService {
     actorUserId: string,
   ) {
     const existingDrone = await this.dronesRepository.findOne({
-      where: { serialNumber: createDroneDto.serialNumber, ownerId: fleetOwnerId },
+      where: {
+        serialNumber: createDroneDto.serialNumber,
+        ownerId: fleetOwnerId,
+      },
     });
 
     if (existingDrone) {
@@ -105,7 +131,7 @@ export class DronesService {
 
     const [rows, total] = await this.dronesRepository.findAndCount({
       where,
-      order: { registeredAt: 'DESC' },
+      order: resolveDroneListOrder(query),
       skip: (query.page - 1) * query.limit,
       take: query.limit,
     });

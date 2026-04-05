@@ -36,11 +36,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async countUsers(): Promise<number> {
-    return this.usersRepository.count();
-  }
-
-  /** Register a new workspace Manager account. */
+  /** Register a new workspace Manager account (each is an independent fleet owner). */
   async registerManager(dto: BootstrapRegisterDto) {
     const email = dto.email.trim().toLowerCase();
     const existing = await this.usersRepository.findOne({ where: { email } });

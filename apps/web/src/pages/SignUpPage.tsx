@@ -6,7 +6,6 @@ import { useAuth } from '../auth/use-auth';
 import { AuthShell } from '../components/AuthShell';
 import { FormNotice } from '../components/FormNotice';
 import { ManagerSignupExplainer } from '../components/ManagerSignupExplainer';
-import { RoleAccessGuide } from '../components/RoleAccessGuide';
 import { fetchAuthStatus, getErrorMessage } from '../lib/api';
 
 const PASSWORD_HINT =
@@ -14,13 +13,6 @@ const PASSWORD_HINT =
 
 function describeSignupFailure(error: unknown): string {
   const detail = getErrorMessage(error);
-
-  if (axios.isAxiosError(error) && error.response?.status === 403) {
-    return (
-      detail ||
-      'This workspace is already set up. Ask your Manager for an account, or sign in.'
-    );
-  }
 
   if (axios.isAxiosError(error) && error.response?.status === 409) {
     return `${detail} Try signing in, or use a different email address.`;
@@ -31,94 +23,6 @@ function describeSignupFailure(error: unknown): string {
   }
 
   return detail || 'Something went wrong. Please try again.';
-}
-
-/** Shown when GET /auth/status reports bootstrapAvailable: false (≥1 user in DB). */
-function SignupClosedView() {
-  const isLocalHost =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1');
-
-  return (
-    <AuthShell
-      brandContent={
-        <div className="auth-shell-brand-stack">
-          <div className="signup-explainer">
-            <div className="badge auth-shell-badge">
-              Manager sign-up unavailable
-            </div>
-            <h2 className="auth-shell-headline">
-              This workspace already has users
-            </h2>
-            <p className="auth-shell-lede">
-              The first <strong>Workspace Manager</strong> (or any seeded account)
-              is already in the database. New <strong>Pilots</strong> and{' '}
-              <strong>Technicians</strong> are created by that Manager from{' '}
-              <strong>Settings → Team</strong> — not from this sign-up page.
-            </p>
-          </div>
-          <RoleAccessGuide lead="Use Sign in with the email your Manager invited. You will get a one-time password, then choose your own password." />
-        </div>
-      }
-      footer={
-        <p className="muted auth-switch">
-          <Link className="auth-inline-link" to="/sign-in">
-            Go to sign in
-          </Link>
-        </p>
-      }
-      subtitle="This is expected whenever the user table is not empty — not a broken sign-up screen."
-      title="Sign up"
-    >
-      <FormNotice
-        message="Ask your workspace Manager to send an invitation to your work email."
-        tone="warning"
-      />
-      <p className="signup-closed-context muted">
-        The full Manager registration form only appears while the API reports{' '}
-        <strong>zero</strong> user accounts. Your environment already has at
-        least one (often from seed data or a previous sign-up).
-      </p>
-      {isLocalHost ? (
-        <details className="signup-local-reset" open>
-          <summary className="signup-local-reset-summary">
-            Local Docker — reset the database to open Manager sign-up again
-          </summary>
-          <div className="signup-local-reset-body">
-            <p>
-              Postgres is probably keeping old rows in a Docker volume (for
-              example after <code>pnpm --filter @skyops/api seed</code>).
-            </p>
-            <p>
-              <strong>1.</strong> From the repository root, wipe the volume and
-              restart (destructive — deletes all local SkyOps data):
-            </p>
-            <pre className="signup-local-reset-code">
-              pnpm docker:db:reset
-            </pre>
-            <p className="muted signup-local-reset-alt">
-              Same thing manually: <code>docker compose down -v</code> then{' '}
-              <code>docker compose up -d --build</code>
-            </p>
-            <p>
-              <strong>2.</strong> When the API is up, open <strong>/sign-up</strong>{' '}
-              again — you should see the Manager form.
-            </p>
-            <p>
-              <strong>3.</strong> Skip <code>pnpm seed</code> until after you
-              finish Manager sign-up, if you want to exercise that flow.
-            </p>
-            <p className="muted signup-local-reset-foot">
-              Prefer to keep data? Sign in with your existing Manager (seeded
-              demo is often <code>ops@skyops.demo</code>) and invite users from
-              Settings.
-            </p>
-          </div>
-        </details>
-      ) : null}
-    </AuthShell>
-  );
 }
 
 export function SignUpPage() {
@@ -140,7 +44,7 @@ export function SignUpPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      navigate('/dashboard', { replace: true });
+      navigate('/', { replace: true });
     }
   }, [status, navigate]);
 
@@ -167,7 +71,7 @@ export function SignUpPage() {
 
     try {
       await bootstrapWorkspace(email.trim(), password, fullName.trim());
-      navigate('/dashboard', { replace: true });
+      navigate('/', { replace: true });
     } catch (error) {
       setFormError(describeSignupFailure(error));
     } finally {
@@ -201,7 +105,7 @@ export function SignUpPage() {
             </Link>
           </p>
         }
-        subtitle="We could not reach the server to check whether sign-up is open."
+        subtitle="We could not reach the server to verify sign-up availability."
         title="Connection issue"
       >
         <FormNotice
@@ -210,10 +114,6 @@ export function SignUpPage() {
         />
       </AuthShell>
     );
-  }
-
-  if (!statusQuery.data?.bootstrapAvailable) {
-    return <SignupClosedView />;
   }
 
   return (
@@ -325,7 +225,9 @@ export function SignUpPage() {
             disabled={submitting}
             type="submit"
           >
-            {submitting ? 'Creating Manager account…' : 'Create Manager account'}
+            {submitting
+              ? 'Creating Manager account…'
+              : 'Create Manager account'}
           </button>
         </div>
       </form>

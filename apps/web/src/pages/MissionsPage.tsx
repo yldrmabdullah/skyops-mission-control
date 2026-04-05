@@ -1,5 +1,11 @@
 import { useDeferredValue, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useAuth } from '../auth/use-auth';
 import { FormNotice } from '../components/FormNotice';
 import { StatePanel } from '../components/StatePanel';
@@ -11,6 +17,10 @@ import {
   MissionTimelineTable,
   SelectedMissionPanel,
 } from '../features/missions/MissionPanels';
+import {
+  missionSortOrderToParam,
+  resolveMissionListSort,
+} from '../features/missions/mission-list-sort';
 import { MissionPlanForm } from '../features/missions/MissionPlanForm';
 import { MissionTransitionForm } from '../features/missions/MissionTransitionForm';
 import {
@@ -30,6 +40,7 @@ import { canScheduleMissions } from '../lib/roles';
 import { useFeedbackState } from '../hooks/use-feedback-state';
 import type {
   CreateMissionPayload,
+  MissionListSortField,
   MissionStatus,
   TransitionMissionPayload,
 } from '../types/api';
@@ -45,6 +56,8 @@ interface MissionFiltersState {
 export function MissionsPage() {
   const { user } = useAuth();
   const { notify } = useNotifications();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sortBy, sortOrder } = resolveMissionListSort(searchParams);
   const allowMissionEdits = canScheduleMissions(user?.role);
   const [filters, setFilters] = useState<MissionFiltersState>({
     status: '',
@@ -75,6 +88,8 @@ export function MissionsPage() {
       filters.startDate,
       filters.endDate,
       deferredMissionSearch.trim(),
+      sortBy,
+      sortOrder,
     ],
     queryFn: () =>
       fetchMissions({
@@ -87,11 +102,17 @@ export function MissionsPage() {
           ? localDateToEndOfDayIso(filters.endDate)
           : undefined,
         search: deferredMissionSearch.trim() || undefined,
+        sortBy,
+        sortOrder,
       }),
+    placeholderData: keepPreviousData,
   });
   const dronesResponse = dronesQuery.data;
   const missionsResponse = missionsQuery.data;
-  const isLoading = missionsQuery.isLoading;
+  const isTimelineLoading =
+    missionsQuery.isPending && missionsQuery.data === undefined;
+  const isMissionListBackgroundFetch =
+    missionsQuery.isFetching && missionsQuery.data !== undefined;
 
   const drones = dronesQuery.isError ? [] : (dronesResponse?.data ?? []);
   const missions = missionsQuery.isError ? [] : (missionsResponse?.data ?? []);
@@ -192,7 +213,7 @@ export function MissionsPage() {
   if (missionsQuery.isError && dronesQuery.isError) {
     return (
       <StatePanel
-        actionHref="/dashboard"
+        actionHref="/"
         actionLabel="Return to dashboard"
         description={getErrorMessage(dronesQuery.error ?? missionsQuery.error)}
         title="Unable to load mission control"
@@ -337,13 +358,32 @@ export function MissionsPage() {
       </section>
 
       <MissionTimelineTable
-        isLoading={isLoading}
+        isBackgroundFetching={isMissionListBackgroundFetch}
+        isLoading={isTimelineLoading}
         missions={missions}
         selectedMissionId={activeMissionId}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
         onSelect={(missionId) => {
           setSelectedMissionId(missionId);
           editFeedback.clearFeedback();
           transitionFeedback.clearFeedback();
+        }}
+        onSortChange={(field: MissionListSortField) => {
+          const nextParams = new URLSearchParams(searchParams);
+          if (sortBy === field) {
+            nextParams.set(
+              'order',
+              missionSortOrderToParam(sortOrder === 'ASC' ? 'DESC' : 'ASC'),
+            );
+          } else {
+            nextParams.set('sort', field);
+            nextParams.set('order', 'asc');
+          }
+          setSearchParams(nextParams, {
+            replace: true,
+            preventScrollReset: true,
+          });
         }}
       />
     </>

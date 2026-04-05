@@ -1,4 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Plane,
+  ClipboardList,
+  History,
+  Settings,
+  LogOut,
+} from 'lucide-react';
 import { useAuth } from '../auth/use-auth';
 import { roleTitle } from '../lib/role-descriptions';
 import { showMissionControlNav } from '../lib/roles';
@@ -6,15 +14,19 @@ import type { OperatorRole } from '../types/api';
 
 function navigationForRole(role: OperatorRole | undefined) {
   const items = [
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/drones', label: 'Drone Registry' },
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/drones', label: 'Drone Registry', icon: Plane },
   ];
   if (showMissionControlNav(role)) {
-    items.push({ to: '/missions', label: 'Mission Control' });
+    items.push({
+      to: '/missions',
+      label: 'Mission Control',
+      icon: ClipboardList,
+    });
   }
   items.push(
-    { to: '/audit', label: 'Audit log' },
-    { to: '/settings', label: 'Settings' },
+    { to: '/audit', label: 'Audit log', icon: History },
+    { to: '/settings', label: 'Settings', icon: Settings },
   );
   return items;
 }
@@ -45,7 +57,8 @@ export function AppLayout() {
               }
               to={item.to}
             >
-              {item.label}
+              <item.icon className="nav-icon" size={18} />
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -66,6 +79,7 @@ export function AppLayout() {
             type="button"
             onClick={() => signOut()}
           >
+            <LogOut size={16} style={{ marginRight: '0.5rem' }} />
             Sign out
           </button>
         </div>

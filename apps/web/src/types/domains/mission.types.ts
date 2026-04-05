@@ -39,9 +39,19 @@ export interface CreateMissionPayload {
   plannedEnd: string;
 }
 
+export type MissionListSortField =
+  | 'name'
+  | 'type'
+  | 'pilotName'
+  | 'siteLocation'
+  | 'plannedStart'
+  | 'status';
+
 export interface ListMissionsParams {
   page?: number;
   limit?: number;
+  sortBy?: MissionListSortField;
+  sortOrder?: 'ASC' | 'DESC';
   status?: MissionStatus;
   droneId?: string;
   startDate?: string;

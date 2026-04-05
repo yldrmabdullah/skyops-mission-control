@@ -73,9 +73,7 @@ export async function createTeamMember(payload: {
 }
 
 export async function listWorkspaceMembers(): Promise<WorkspaceMember[]> {
-  const { data } = await apiClient.get<WorkspaceMember[]>(
-    '/auth/team/members',
-  );
+  const { data } = await apiClient.get<WorkspaceMember[]>('/auth/team/members');
   return data;
 }
 

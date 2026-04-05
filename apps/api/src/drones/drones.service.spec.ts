@@ -6,6 +6,10 @@ import { AuditService } from '../audit/audit.service';
 import { OperatorRole } from '../auth/operator-role.enum';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
 import { Mission } from '../missions/entities/mission.entity';
+import {
+  DroneListSortField,
+  DroneListSortOrder,
+} from './dto/drone-list-sort.enum';
 import { DronesService } from './drones.service';
 import { Drone, DroneModel, DroneStatus } from './entities/drone.entity';
 
@@ -133,6 +137,31 @@ describe('DronesService', () => {
       expect(result.meta.total).toBe(1);
       expect(result.data[0]).toHaveProperty('maintenanceDue');
       expect(result.data[0]).toHaveProperty('maintenanceWatchlist');
+      expect(dronesRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order: { registeredAt: 'DESC' },
+        }),
+      );
+    });
+
+    it('should order by requested column', async () => {
+      jest
+        .spyOn(dronesRepository, 'findAndCount')
+        .mockResolvedValue([[mockDrone], 1]);
+      await service.findAll(
+        {
+          page: 1,
+          limit: 10,
+          sortBy: DroneListSortField.SERIAL_NUMBER,
+          sortOrder: DroneListSortOrder.ASC,
+        },
+        ownerId,
+      );
+      expect(dronesRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order: { serialNumber: 'ASC' },
+        }),
+      );
     });
   });
 
@@ -149,11 +178,7 @@ describe('DronesService', () => {
       jest.spyOn(dronesRepository, 'findOne').mockResolvedValue(overdueDrone);
 
       await expect(
-        service.update(
-          'drone-1',
-          { status: DroneStatus.AVAILABLE },
-          ownerId,
-        ),
+        service.update('drone-1', { status: DroneStatus.AVAILABLE }, ownerId),
       ).rejects.toThrow(BadRequestException);
     });
 

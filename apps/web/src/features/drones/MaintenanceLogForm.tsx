@@ -40,12 +40,15 @@ export function MaintenanceLogForm({
   const [clientError, setClientError] = useState<string | null>(null);
   const [fileAttachment, setFileAttachment] = useState<File | null>(null);
 
-  const hoursEntered = parseLocaleDecimal(formState.flightHoursAtMaintenance) || 0;
-  const isHoursSuspicious = hoursEntered > totalFlightHours + 50 || hoursEntered < totalFlightHours - 10;
+  const hoursEntered =
+    parseLocaleDecimal(formState.flightHoursAtMaintenance) || 0;
+  const isHoursSuspicious =
+    hoursEntered > totalFlightHours + 50 ||
+    hoursEntered < totalFlightHours - 10;
 
   return (
     <form
-      className="maintenance-form-premium"
+      className="maintenance-form"
       data-testid="create-maintenance-form"
       onSubmit={(event) => {
         event.preventDefault();
@@ -64,18 +67,20 @@ export function MaintenanceLogForm({
         });
       }}
     >
-      <div className="form-section">
-        <div className="section-header">
-          <div className="section-icon">🛠️</div>
+      <div className="maintenance-form-section">
+        <div className="maintenance-section-header">
+          <span className="maintenance-section-step" aria-hidden>
+            1
+          </span>
           <div>
-            <h4>Service Details</h4>
-            <p className="muted text-sm">Select maintenance type and schedule</p>
+            <h4>Service details</h4>
+            <p className="muted text-sm">Maintenance type and service date</p>
           </div>
         </div>
 
-        <div className="form-grid-2">
+        <div className="maintenance-form-grid-2">
           <label className="field">
-            <span className="field-label">Maintenance Category</span>
+            <span className="field-label">Maintenance type</span>
             <select
               className="select"
               value={formState.type}
@@ -95,7 +100,7 @@ export function MaintenanceLogForm({
           </label>
 
           <DateInput
-            label="Service Date"
+            label="Service date"
             required
             value={formState.performedAt}
             onChange={(value) =>
@@ -108,18 +113,20 @@ export function MaintenanceLogForm({
         </div>
       </div>
 
-      <div className="form-section">
-        <div className="section-header">
-          <div className="section-icon">⚙️</div>
+      <div className="maintenance-form-section">
+        <div className="maintenance-section-header">
+          <span className="maintenance-section-step" aria-hidden>
+            2
+          </span>
           <div>
-            <h4>Technical Record</h4>
-            <p className="muted text-sm">Logged metrics at time of service</p>
+            <h4>Technical record</h4>
+            <p className="muted text-sm">Technician and airframe hours</p>
           </div>
         </div>
 
-        <div className="form-grid-2">
+        <div className="maintenance-form-grid-2">
           <label className="field">
-            <span className="field-label">Primary Technician</span>
+            <span className="field-label">Technician</span>
             <input
               required
               className="input"
@@ -135,11 +142,11 @@ export function MaintenanceLogForm({
           </label>
 
           <div className="field">
-            <span className="field-label">Current Airframe Hours</span>
-            <div className="input-with-validation">
+            <span className="field-label">Airframe hours at service</span>
+            <div className="maintenance-input-with-meta">
               <DecimalTextInput
                 required
-                className={`input ${isHoursSuspicious ? 'input-warning' : ''}`}
+                className={`input ${isHoursSuspicious ? 'maintenance-input-warning' : ''}`}
                 value={formState.flightHoursAtMaintenance}
                 onChange={(value) => {
                   setClientError(null);
@@ -149,34 +156,38 @@ export function MaintenanceLogForm({
                   }));
                 }}
               />
-              <div className="hours-context">
-                <span className="muted text-xs">Drone Total: {totalFlightHours}h</span>
+              <div className="maintenance-hours-meta">
+                <span className="muted text-xs">
+                  Fleet total: {totalFlightHours}h
+                </span>
               </div>
             </div>
-            {isHoursSuspicious && hoursEntered > 0 && (
-              <p className="text-warning text-xs mt-1">
-                ⚠️ Unusual variance from registered total ({totalFlightHours}h)
+            {isHoursSuspicious && hoursEntered > 0 ? (
+              <p className="maintenance-warning-hint">
+                Unusual variance from registered total ({totalFlightHours}h).
               </p>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
 
-      <div className="form-section">
-        <div className="section-header">
-          <div className="section-icon">📝</div>
+      <div className="maintenance-form-section">
+        <div className="maintenance-section-header">
+          <span className="maintenance-section-step" aria-hidden>
+            3
+          </span>
           <div>
             <h4>Documentation</h4>
-            <p className="muted text-sm">Notes and file attachments</p>
+            <p className="muted text-sm">Notes, links, and attachments</p>
           </div>
         </div>
 
-        <div className="form-stack">
+        <div className="maintenance-form-stack">
           <label className="field">
-            <span className="field-label">Compliance Notes</span>
+            <span className="field-label">Notes</span>
             <textarea
               className="input textarea"
-              placeholder="Detail parts replaced or diagnostics performed..."
+              placeholder="Parts replaced, findings, follow-up…"
               rows={3}
               value={formState.notes}
               onChange={(event) =>
@@ -188,12 +199,12 @@ export function MaintenanceLogForm({
             />
           </label>
 
-          <div className="form-grid-2">
+          <div className="maintenance-form-grid-2">
             <label className="field">
-              <span className="field-label">External Resource Links</span>
+              <span className="field-label">External links</span>
               <textarea
                 className="input textarea"
-                placeholder="Comma-separated URLs..."
+                placeholder="Comma-separated URLs"
                 rows={2}
                 value={formState.attachmentUrlsRaw}
                 onChange={(event) =>
@@ -206,22 +217,29 @@ export function MaintenanceLogForm({
             </label>
 
             <div className="field">
-              <span className="field-label">Digital Service Log (PDF/IMG)</span>
-              <div className={`file-drop-zone ${fileAttachment ? 'has-file' : ''}`}>
+              <span className="field-label">Attachment (PDF or image)</span>
+              <div
+                className={`maintenance-file-drop ${fileAttachment ? 'has-file' : ''}`}
+              >
                 <input
                   accept="image/*,application/pdf"
-                  className="file-input-hidden"
+                  className="maintenance-file-input-hidden"
                   id="maintenance-file-upload"
                   type="file"
                   onChange={(event) =>
                     setFileAttachment(event.target.files?.[0] ?? null)
                   }
                 />
-                <label htmlFor="maintenance-file-upload" className="file-drop-label">
+                <label
+                  htmlFor="maintenance-file-upload"
+                  className="maintenance-file-drop-label"
+                >
                   {fileAttachment ? (
-                    <span className="file-name">✅ {fileAttachment.name}</span>
+                    <span className="file-name">
+                      Selected: {fileAttachment.name}
+                    </span>
                   ) : (
-                    <span className="muted">Drop file or click to browse</span>
+                    <span className="muted">Drop a file or click to browse</span>
                   )}
                 </label>
               </div>
@@ -230,137 +248,16 @@ export function MaintenanceLogForm({
         </div>
       </div>
 
-      {clientError && <FormNotice tone="error" message={clientError} />}
-      {feedback && <FormNotice tone={feedback.tone} message={feedback.message} />}
+      {clientError ? <FormNotice tone="error" message={clientError} /> : null}
+      {feedback ? (
+        <FormNotice tone={feedback.tone} message={feedback.message} />
+      ) : null}
 
-      <div className="form-footer-premium">
-        <button
-          className="button transition-btn"
-          disabled={isPending}
-          type="submit"
-        >
-          {isPending ? (
-            <span className="flex items-center gap-2">
-              <span className="spinner-sm"></span> Syncing System...
-            </span>
-          ) : (
-            'Finalize Service Record'
-          )}
+      <div className="maintenance-form-footer">
+        <button className="button secondary" disabled={isPending} type="submit">
+          {isPending ? 'Saving…' : 'Save maintenance log'}
         </button>
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .maintenance-form-premium {
-          display: grid;
-          gap: 2rem;
-          padding: 0.5rem;
-        }
-        .form-section {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(214, 226, 206, 0.08);
-          border-radius: 1.25rem;
-          padding: 1.5rem;
-          transition: border-color 0.2s ease;
-        }
-        .form-section:hover {
-          border-color: rgba(214, 226, 206, 0.15);
-        }
-        .section-header {
-          display: flex;
-          gap: 1rem;
-          align-items: center;
-          margin-bottom: 1.5rem;
-        }
-        .section-icon {
-          font-size: 1.5rem;
-          background: rgba(210, 255, 114, 0.08);
-          padding: 0.75rem;
-          border-radius: 1rem;
-          line-height: 1;
-        }
-        .section-header h4 {
-          margin: 0;
-          font-size: 1.1rem;
-          font-weight: 600;
-          color: #fff;
-        }
-        .form-grid-2 {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1.5rem;
-        }
-        .form-stack {
-          display: grid;
-          gap: 1.25rem;
-        }
-        .input-with-validation {
-          position: relative;
-        }
-        .hours-context {
-          position: absolute;
-          right: 1rem;
-          top: 50%;
-          transform: translateY(-50%);
-          pointer-events: none;
-        }
-        .input-warning {
-          border-color: var(--warning) !important;
-          box-shadow: 0 0 0 1px rgba(255, 207, 92, 0.2);
-        }
-        .file-drop-zone {
-          border: 2px dashed rgba(214, 226, 206, 0.2);
-          border-radius: 0.85rem;
-          padding: 0.75rem;
-          text-align: center;
-          background: rgba(255, 255, 255, 0.01);
-          transition: all 0.2s ease;
-          position: relative;
-        }
-        .file-drop-zone:hover {
-          background: rgba(255, 255, 255, 0.03);
-          border-color: var(--accent);
-        }
-        .file-drop-zone.has-file {
-          border-style: solid;
-          border-color: var(--success);
-          background: rgba(143, 242, 180, 0.03);
-        }
-        .file-input-hidden {
-          position: absolute;
-          inset: 0;
-          opacity: 0;
-          cursor: pointer;
-        }
-        .file-drop-label {
-          font-size: 0.85rem;
-          cursor: pointer;
-        }
-        .text-sm { font-size: 0.85rem; }
-        .text-xs { font-size: 0.75rem; }
-        .text-warning { color: var(--warning); }
-        .form-footer-premium {
-          display: flex;
-          justify-content: flex-end;
-          padding-top: 1rem;
-        }
-        .transition-btn {
-          background: var(--accent);
-          color: #0d1510;
-          font-weight: 700;
-          padding: 1rem 2rem;
-          border-radius: 1rem;
-          font-size: 1rem;
-          box-shadow: 0 8px 24px rgba(210, 255, 114, 0.2);
-        }
-        .transition-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 32px rgba(210, 255, 114, 0.3);
-        }
-        @media (max-width: 600px) {
-          .form-grid-2 { grid-template-columns: 1fr; }
-        }
-      ` }} />
     </form>
   );
 }
-

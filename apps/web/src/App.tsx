@@ -19,10 +19,13 @@ export function App() {
       <Route path="/sign-up" element={<SignUpPage />} />
       <Route path="/workspace/bootstrap" element={<SignUpPage />} />
       <Route element={<RequireAuth />}>
-        <Route path="/account/change-password" element={<ChangePasswordPage />} />
+        <Route
+          path="/account/change-password"
+          element={<ChangePasswordPage />}
+        />
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate replace to="/dashboard" />} />
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route index element={<DashboardPage />} />
+          <Route path="dashboard" element={<Navigate replace to="/" />} />
           <Route path="drones" element={<DronesPage />} />
           <Route path="drones/:droneId" element={<DroneDetailPage />} />
           <Route path="missions" element={<MissionsPage />} />

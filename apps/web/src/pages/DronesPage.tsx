@@ -1,11 +1,21 @@
 import { useAuth } from '../auth/use-auth';
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { StatePanel } from '../components/StatePanel';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { useNotifications } from '../components/use-notifications';
 import { DroneRegistryForm } from '../features/drones/DroneRegistryForm';
+import {
+  type DroneListSortField,
+  resolveDroneListSort,
+  sortOrderToParam,
+} from '../features/drones/drone-list-sort';
 import {
   DroneRegistryHighlights,
   DroneRegistryToolbar,
@@ -28,19 +38,31 @@ export function DronesPage() {
   const formFeedback = useFeedbackState();
 
   const selectedStatus = searchParams.get('status') ?? '';
+  const { sortBy, sortOrder } = resolveDroneListSort(searchParams);
   const queryClient = useQueryClient();
 
   const deferredSearch = useDeferredValue(searchValue);
   const dronesQuery = useQuery({
-    queryKey: ['drones', selectedStatus, deferredSearch.trim()],
+    queryKey: [
+      'drones',
+      selectedStatus,
+      deferredSearch.trim(),
+      sortBy,
+      sortOrder,
+    ],
     queryFn: () =>
       fetchDrones(
         selectedStatus || undefined,
         deferredSearch.trim() || undefined,
+        { sortBy, sortOrder },
       ),
+    placeholderData: keepPreviousData,
   });
   const data = dronesQuery.data;
-  const isLoading = dronesQuery.isLoading;
+  /** Avoid full-table skeleton while sort/search params change — keep prior rows until the new response arrives. */
+  const isLoading = dronesQuery.isPending && !dronesQuery.data;
+  const isListBackgroundFetch =
+    dronesQuery.isFetching && dronesQuery.data !== undefined;
 
   const createDroneMutation = useMutation({
     mutationFn: (payload: CreateDronePayload) => createDrone(payload),
@@ -145,7 +167,7 @@ export function DronesPage() {
   if (dronesQuery.isError) {
     return (
       <StatePanel
-        actionHref="/dashboard"
+        actionHref="/"
         actionLabel="Return to dashboard"
         description={getErrorMessage(dronesQuery.error)}
         title="Unable to load the drone registry"
@@ -176,10 +198,11 @@ export function DronesPage() {
         {showFleetForm ? (
           <SurfaceCard
             actions={
-              <span className="muted">
+              <span className="registry-panel-kicker muted">
                 Full validation is enforced by the API
               </span>
             }
+            className="surface-card--drone-registry-panel"
             title="Add drone"
           >
             <DroneRegistryForm
@@ -220,15 +243,37 @@ export function DronesPage() {
             nextParams.delete('status');
           }
 
-          setSearchParams(nextParams);
+          setSearchParams(nextParams, {
+            replace: true,
+            preventScrollReset: true,
+          });
         }}
       />
 
       <div ref={dronesTableAnchorRef}>
         <DronesTable
           drones={tableDrones}
+          isBackgroundFetching={isListBackgroundFetch}
           isLoading={isLoading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
           total={data?.meta.total ?? 0}
+          onSortChange={(field: DroneListSortField) => {
+            const nextParams = new URLSearchParams(searchParams);
+            if (sortBy === field) {
+              nextParams.set(
+                'order',
+                sortOrderToParam(sortOrder === 'ASC' ? 'DESC' : 'ASC'),
+              );
+            } else {
+              nextParams.set('sort', field);
+              nextParams.set('order', 'asc');
+            }
+            setSearchParams(nextParams, {
+              replace: true,
+              preventScrollReset: true,
+            });
+          }}
         />
       </div>
     </>

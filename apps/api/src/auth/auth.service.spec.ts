@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -14,7 +13,7 @@ import { OperatorRole } from './operator-role.enum';
 describe('AuthService', () => {
   let service: AuthService;
   let usersRepository: jest.Mocked<
-    Pick<Repository<User>, 'findOne' | 'find' | 'create' | 'save' | 'count'>
+    Pick<Repository<User>, 'findOne' | 'find' | 'create' | 'save'>
   >;
   let jwtService: jest.Mocked<Pick<JwtService, 'signAsync'>>;
 
@@ -24,7 +23,6 @@ describe('AuthService', () => {
       find: jest.fn(),
       create: jest.fn((u) => u as User),
       save: jest.fn((u) => Promise.resolve(u as User)),
-      count: jest.fn(),
     };
     jwtService = {
       signAsync: jest.fn().mockResolvedValue('jwt-token'),
@@ -41,24 +39,11 @@ describe('AuthService', () => {
     service = module.get(AuthService);
   });
 
-  it('registerBootstrap rejects when workspace already exists', async () => {
-    usersRepository.count.mockResolvedValue(1);
-
-    await expect(
-      service.registerBootstrap({
-        email: 'new@example.com',
-        password: 'Secret1a',
-        fullName: 'Test',
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('registerBootstrap rejects when email exists', async () => {
-    usersRepository.count.mockResolvedValue(0);
+  it('registerManager rejects when email exists', async () => {
     usersRepository.findOne.mockResolvedValue({ id: 'u1' } as User);
 
     await expect(
-      service.registerBootstrap({
+      service.registerManager({
         email: 'taken@example.com',
         password: 'Secret1a',
         fullName: 'Test',
@@ -66,12 +51,11 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('registerBootstrap creates first Manager', async () => {
-    usersRepository.count.mockResolvedValue(0);
+  it('registerManager creates a new Manager', async () => {
     usersRepository.findOne.mockResolvedValue(null);
     usersRepository.save.mockImplementation(async (u) => u as User);
 
-    await service.registerBootstrap({
+    await service.registerManager({
       email: 'mgr@example.com',
       password: 'Secret1a',
       fullName: 'Manager User',

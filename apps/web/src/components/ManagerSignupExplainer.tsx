@@ -4,14 +4,17 @@
 export function ManagerSignupExplainer() {
   return (
     <div className="signup-explainer">
-      <div className="badge auth-shell-badge">Workspace Manager Registration</div>
+      <div className="badge auth-shell-badge">
+        Workspace Manager Registration
+      </div>
       <h2 className="auth-shell-headline">
         Open SkyOps for your operations team
       </h2>
       <p className="auth-shell-lede">
-        Create a <strong>Workspace Manager</strong> account for your organization. 
-        You will have full control over the fleet, mission scheduling, and maintenance logs. 
-        Once registered, you can invite your crew from Settings.
+        Create a <strong>Workspace Manager</strong> account for your
+        organization. You will have full control over the fleet, mission
+        scheduling, and maintenance logs. Once registered, you can invite your
+        crew from Settings.
       </p>
 
       <div className="signup-callout" role="note">
@@ -38,11 +41,13 @@ export function ManagerSignupExplainer() {
           </svg>
         </div>
         <div className="signup-callout-body">
-          <p className="signup-callout-title">You are creating a Manager account</p>
+          <p className="signup-callout-title">
+            You are creating a Manager account
+          </p>
           <p className="signup-callout-text">
-            Managers register drones, run the mission board, log maintenance, and
-            use <strong>Settings → Team</strong> to add Pilots and Technicians
-            with a secure one-time password.
+            Managers register drones, run the mission board, log maintenance,
+            and use <strong>Settings → Team</strong> to add Pilots and
+            Technicians with a secure one-time password.
           </p>
         </div>
       </div>
@@ -88,10 +93,13 @@ export function ManagerSignupExplainer() {
       </ol>
 
       <div className="signup-footnote">
-        <p className="signup-footnote-title">Looking for Pilot or Technician access?</p>
+        <p className="signup-footnote-title">
+          Looking for Pilot or Technician access?
+        </p>
         <p className="signup-footnote-text">
-          Pilots and Technicians are <strong>invited from Settings</strong>. 
-          Your Manager must create your account to provide you with secure access.
+          Pilots and Technicians are <strong>invited from Settings</strong>.
+          Your Manager must create your account to provide you with secure
+          access.
         </p>
       </div>
     </div>

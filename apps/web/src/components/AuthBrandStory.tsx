@@ -22,7 +22,9 @@ export function AuthBrandStory() {
           Rules that mirror the field: availability, overlaps, and lifecycle
           transitions
         </li>
-        <li>Immutable-style audit trails for operational and compliance reviews</li>
+        <li>
+          Immutable-style audit trails for operational and compliance reviews
+        </li>
       </ul>
     </div>
   );

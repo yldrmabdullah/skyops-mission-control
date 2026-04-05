@@ -6,6 +6,11 @@ import { AuthShell } from '../components/AuthShell';
 import { FormNotice } from '../components/FormNotice';
 import { RoleAccessGuide } from '../components/RoleAccessGuide';
 import { getErrorMessage } from '../lib/api';
+import {
+  demoManagerEmail,
+  demoManagerPassword,
+  demoWorkspaceHintEnabled,
+} from '../lib/demo-workspace';
 
 export function SignInPage() {
   const { signIn, status, user } = useAuth();
@@ -13,7 +18,7 @@ export function SignInPage() {
   const location = useLocation();
   const rawFrom =
     (location.state as { from?: { pathname?: string } })?.from?.pathname ??
-    '/dashboard';
+    '/';
   const from =
     rawFrom &&
     rawFrom !== '/sign-in' &&
@@ -21,7 +26,7 @@ export function SignInPage() {
     rawFrom !== '/workspace/bootstrap' &&
     rawFrom !== '/account/change-password'
       ? rawFrom
-      : '/dashboard';
+      : '/';
   const sessionExpired = Boolean(
     (location.state as { sessionExpired?: boolean })?.sessionExpired,
   );
@@ -31,8 +36,6 @@ export function SignInPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-
 
   useEffect(() => {
     if (status !== 'authenticated' || !user) {
@@ -112,6 +115,41 @@ export function SignInPage() {
       ) : null}
 
       {formError ? <FormNotice message={formError} tone="error" /> : null}
+
+      {demoWorkspaceHintEnabled ? (
+        <details className="signup-local-reset demo-workspace-hint">
+          <summary className="signup-local-reset-summary">
+            Try the seeded demo workspace
+          </summary>
+          <div className="signup-local-reset-body">
+            <p>
+              After <code>pnpm --filter @skyops/api seed</code>, sign in as the
+              demo <strong>Manager</strong> (full fleet, team, notifications,
+              audit):
+            </p>
+            <p className="demo-workspace-credentials muted">
+              <strong>{demoManagerEmail}</strong>
+              <span aria-hidden="true"> · </span>
+              <strong>{demoManagerPassword}</strong>
+            </p>
+            <button
+              className="button secondary demo-workspace-fill"
+              type="button"
+              onClick={() => {
+                setEmail(demoManagerEmail);
+                setPassword(demoManagerPassword);
+              }}
+            >
+              Fill Manager credentials
+            </button>
+            <p className="muted demo-workspace-more">
+              See README for <strong>pilot@skyops.demo</strong> and{' '}
+              <strong>tech@skyops.demo</strong> (same password; Pilot must set a
+              new password on first sign-in).
+            </p>
+          </div>
+        </details>
+      ) : null}
 
       <form className="auth-form" onSubmit={onSubmit}>
         <label className="field">

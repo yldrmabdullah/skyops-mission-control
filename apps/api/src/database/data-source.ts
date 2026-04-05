@@ -1,4 +1,5 @@
 import { config as loadEnvironment } from 'dotenv';
+import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { AuditEvent } from '../audit/entities/audit-event.entity';
@@ -26,5 +27,5 @@ export default new DataSource({
     AuditEvent,
     InAppNotification,
   ],
-  migrations: ['src/database/migrations/*.{ts,js}'],
+  migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
 });

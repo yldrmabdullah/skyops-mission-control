@@ -19,9 +19,14 @@ export function showMissionControlNav(role: OperatorRole | undefined): boolean {
 }
 
 /** Top-level workspace Manager (can invite Pilots / Technicians). */
-export function isWorkspaceRootManager(user: {
-  role: OperatorRole;
-  workspaceOwnerId?: string | null;
-} | null | undefined): boolean {
+export function isWorkspaceRootManager(
+  user:
+    | {
+        role: OperatorRole;
+        workspaceOwnerId?: string | null;
+      }
+    | null
+    | undefined,
+): boolean {
   return user?.role === 'MANAGER' && !user.workspaceOwnerId;
 }

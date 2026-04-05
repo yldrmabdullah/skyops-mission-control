@@ -28,7 +28,7 @@ export function AuditLogPage() {
   if (auditQuery.isError) {
     return (
       <StatePanel
-        actionHref="/dashboard"
+        actionHref="/"
         actionLabel="Back to dashboard"
         description={getErrorMessage(auditQuery.error)}
         title="Unable to load audit log"

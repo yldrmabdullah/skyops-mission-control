@@ -50,10 +50,10 @@ export function DashboardFleetStatusAndActivity({
             <EmptyState>Mission activity could not be loaded.</EmptyState>
           ) : recentMissions.length ? (
             recentMissions.map((mission) => (
-              <div className="list-row" key={mission.id}>
-                <div>
+              <div className="list-row list-row--mission" key={mission.id}>
+                <div className="list-row-main">
                   <div className="list-row-title">{mission.name}</div>
-                  <div className="muted">
+                  <div className="muted list-row-meta">
                     {formatEnumLabel(mission.type)} ·{' '}
                     {format(
                       new Date(mission.actualEnd ?? mission.plannedStart),
@@ -61,7 +61,9 @@ export function DashboardFleetStatusAndActivity({
                     )}
                   </div>
                 </div>
-                <StatusPill value={mission.status} />
+                <div className="list-row-trailing">
+                  <StatusPill value={mission.status} />
+                </div>
               </div>
             ))
           ) : (

@@ -13,9 +13,15 @@ export function ChangePasswordPage() {
   const { user, refreshProfile, signOut, status } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const rawFrom = (location.state as { from?: { pathname?: string } })?.from?.pathname;
   const from =
-    (location.state as { from?: { pathname?: string } })?.from?.pathname ??
-    '/dashboard';
+    rawFrom &&
+    rawFrom !== '/sign-in' &&
+    rawFrom !== '/sign-up' &&
+    rawFrom !== '/workspace/bootstrap' &&
+    rawFrom !== '/account/change-password'
+      ? rawFrom
+      : '/';
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -26,7 +32,7 @@ export function ChangePasswordPage() {
 
   useEffect(() => {
     if (status === 'authenticated' && user && !user.mustChangePassword) {
-      navigate(from === '/account/change-password' ? '/dashboard' : from, {
+      navigate(from === '/account/change-password' ? '/' : from, {
         replace: true,
       });
     }

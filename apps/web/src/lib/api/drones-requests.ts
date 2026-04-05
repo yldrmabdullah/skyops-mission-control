@@ -9,7 +9,12 @@ import { apiClient } from './client';
 export async function fetchDrones(
   status?: string,
   search?: string,
-  options?: { page?: number; limit?: number },
+  options?: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'ASC' | 'DESC';
+  },
 ) {
   const page = options?.page ?? 1;
   const limit = options?.limit ?? 50;
@@ -19,6 +24,8 @@ export async function fetchDrones(
       limit,
       status: status || undefined,
       search: search?.trim() || undefined,
+      sortBy: options?.sortBy,
+      sortOrder: options?.sortOrder,
     },
   });
 

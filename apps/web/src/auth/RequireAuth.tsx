@@ -22,16 +22,9 @@ export function RequireAuth() {
     return <Navigate to="/sign-in" replace state={{ from: location }} />;
   }
 
-  if (
-    user?.mustChangePassword &&
-    location.pathname !== CHANGE_PASSWORD_PATH
-  ) {
+  if (user?.mustChangePassword && location.pathname !== CHANGE_PASSWORD_PATH) {
     return (
-      <Navigate
-        replace
-        state={{ from: location }}
-        to={CHANGE_PASSWORD_PATH}
-      />
+      <Navigate replace state={{ from: location }} to={CHANGE_PASSWORD_PATH} />
     );
   }
 

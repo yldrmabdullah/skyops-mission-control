@@ -26,9 +26,11 @@ export class AuthController {
 
   @Public()
   @Get('status')
-  @ApiOperation({ summary: 'Whether registration is open' })
+  @ApiOperation({
+    summary: 'Whether Manager self-registration is offered by the client',
+  })
   @ApiResponse({ status: 200 })
-  async status() {
+  status() {
     return { bootstrapAvailable: true };
   }
 
@@ -73,7 +75,9 @@ export class AuthController {
 
   @Patch('me/password')
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Change password (required after one-time login password)' })
+  @ApiOperation({
+    summary: 'Change password (required after one-time login password)',
+  })
   @ApiResponse({ status: 401, description: 'Current password wrong' })
   changePassword(
     @CurrentUser() user: JwtPayloadUser,
@@ -94,7 +98,9 @@ export class AuthController {
 
   @Post('team/members')
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Create Pilot or Technician with one-time password (Manager only)' })
+  @ApiOperation({
+    summary: 'Create Pilot or Technician with one-time password (Manager only)',
+  })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 403, description: 'Not a workspace Manager' })
   @Roles(OperatorRole.MANAGER)

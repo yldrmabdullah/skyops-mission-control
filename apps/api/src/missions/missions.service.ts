@@ -1,8 +1,10 @@
+import { Injectable } from '@nestjs/common';
+import { DomainException } from '../common/exceptions/domain.exception';
 import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+  DroneNotAvailableException,
+  MissionNotFoundException,
+  MissionOverlapException,
+} from './exceptions/mission-specific.exceptions';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
@@ -17,10 +19,26 @@ import { resolveDroneStatusAfterMissionCompletion } from '../drones/utils/drone-
 import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
+import {
+  MissionListSortField,
+  MissionListSortOrder,
+} from './dto/mission-list-sort.enum';
 import { TransitionMissionDto } from './dto/transition-mission.dto';
 import { UpdateMissionDto } from './dto/update-mission.dto';
 import { Mission, MissionStatus } from './entities/mission.entity';
 import { assertValidMissionTransition } from './utils/mission-transition.utils';
+
+function resolveMissionListOrder(query: ListMissionsQueryDto): {
+  column: string;
+  direction: 'ASC' | 'DESC';
+} {
+  const sortField = query.sortBy ?? MissionListSortField.PLANNED_START;
+  const direction = query.sortOrder ?? MissionListSortOrder.ASC;
+  return {
+    column: `mission.${sortField}`,
+    direction: direction as 'ASC' | 'DESC',
+  };
+}
 
 @Injectable()
 export class MissionsService {
@@ -49,10 +67,7 @@ export class MissionsService {
       'Planned end',
     );
 
-    await this.getAvailableDroneOrThrow(
-      createMissionDto.droneId,
-      fleetOwnerId,
-    );
+    await this.getAvailableDroneOrThrow(createMissionDto.droneId, fleetOwnerId);
     this.assertValidPlannedWindow(plannedStart, plannedEnd);
 
     await this.assertNoOverlap(
@@ -94,10 +109,7 @@ export class MissionsService {
     const queryBuilder = this.missionsRepository
       .createQueryBuilder('mission')
       .leftJoinAndSelect('mission.drone', 'drone')
-      .andWhere('drone.ownerId = :fleetOwnerId', { fleetOwnerId })
-      .orderBy('mission.plannedStart', 'ASC')
-      .skip((query.page - 1) * query.limit)
-      .take(query.limit);
+      .andWhere('drone.ownerId = :fleetOwnerId', { fleetOwnerId });
 
     if (query.status) {
       queryBuilder.andWhere('mission.status = :status', {
@@ -131,6 +143,13 @@ export class MissionsService {
       });
     }
 
+    const { column, direction } = resolveMissionListOrder(query);
+    queryBuilder
+      .orderBy(column, direction)
+      .addOrderBy('mission.id', 'ASC')
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+
     const [data, total] = await queryBuilder.getManyAndCount();
 
     return {
@@ -146,7 +165,7 @@ export class MissionsService {
     });
 
     if (!mission) {
-      throw new NotFoundException(`Mission ${id} was not found.`);
+      throw new MissionNotFoundException(id);
     }
 
     return mission;
@@ -160,8 +179,9 @@ export class MissionsService {
     const mission = await this.findOne(id, fleetOwnerId);
 
     if (mission.status !== MissionStatus.PLANNED) {
-      throw new BadRequestException(
+      throw new DomainException(
         'Only planned missions can be edited directly.',
+        'MISSION_STATUS_CONFLICT',
       );
     }
 
@@ -212,7 +232,10 @@ export class MissionsService {
     const drone = await this.getDroneOrThrow(mission.droneId, fleetOwnerId);
 
     if (mission.status === transitionMissionDto.status) {
-      throw new BadRequestException(`Mission is already ${mission.status}.`);
+      throw new DomainException(
+        `Mission is already ${mission.status}.`,
+        'MISSION_STATUS_CONFLICT',
+      );
     }
 
     assertValidMissionTransition(mission.status, transitionMissionDto.status);
@@ -262,7 +285,10 @@ export class MissionsService {
   ): Promise<Mission> {
     const abortReason = dto.abortReason?.trim();
     if (!abortReason) {
-      throw new BadRequestException('Aborting a mission requires a reason.');
+      throw new DomainException(
+        'Aborting a mission requires a reason.',
+        'MISSING_REQUIRED_FIELD',
+      );
     }
 
     mission.abortReason = abortReason;
@@ -301,9 +327,7 @@ export class MissionsService {
     actorUserId: string,
   ): Promise<Mission> {
     if (drone.status !== DroneStatus.AVAILABLE) {
-      throw new BadRequestException(
-        'The drone must be AVAILABLE before this mission can move to in progress.',
-      );
+      throw new DroneNotAvailableException(drone.id, drone.status);
     }
 
     mission.actualStart = dto.actualStart
@@ -330,8 +354,9 @@ export class MissionsService {
     actorUserId: string,
   ): Promise<Mission> {
     if (!dto.flightHoursLogged) {
-      throw new BadRequestException(
+      throw new DomainException(
         'Completing a mission requires flight hours to be logged.',
+        'MISSING_REQUIRED_FIELD',
       );
     }
 
@@ -395,14 +420,16 @@ export class MissionsService {
 
   private assertValidPlannedWindow(plannedStart: Date, plannedEnd: Date) {
     if (plannedStart.getTime() < Date.now()) {
-      throw new BadRequestException(
+      throw new DomainException(
         'Missions cannot be scheduled in the past.',
+        'INVALID_MISSION_WINDOW',
       );
     }
 
     if (plannedStart.getTime() >= plannedEnd.getTime()) {
-      throw new BadRequestException(
+      throw new DomainException(
         'Mission planned end must be after planned start.',
+        'INVALID_MISSION_WINDOW',
       );
     }
   }
@@ -413,7 +440,11 @@ export class MissionsService {
     });
 
     if (!drone) {
-      throw new NotFoundException(`Drone ${droneId} was not found.`);
+      throw new DomainException(
+        `Drone ${droneId} was not found.`,
+        'DRONE_NOT_FOUND',
+        404,
+      );
     }
 
     return drone;
@@ -423,9 +454,7 @@ export class MissionsService {
     const drone = await this.getDroneOrThrow(droneId, ownerId);
 
     if (drone.status !== DroneStatus.AVAILABLE) {
-      throw new BadRequestException(
-        'Only drones with AVAILABLE status can be assigned to missions.',
-      );
+      throw new DroneNotAvailableException(drone.id, drone.status);
     }
 
     return drone;
@@ -437,7 +466,7 @@ export class MissionsService {
     plannedEnd: Date,
     options?: { excludeMissionId?: string; ownerIdForNotify?: string },
   ) {
-    const overlappingMission = await this.missionsRepository
+    const overlapQuery = this.missionsRepository
       .createQueryBuilder('mission')
       .where('mission.droneId = :droneId', { droneId })
       .andWhere('mission.status IN (:...schedulableStatuses)', {
@@ -448,14 +477,15 @@ export class MissionsService {
         ],
       })
       .andWhere('mission.plannedStart < :plannedEnd', { plannedEnd })
-      .andWhere('mission.plannedEnd > :plannedStart', { plannedStart })
-      .andWhere(
-        options?.excludeMissionId ? 'mission.id != :excludeMissionId' : '1=1',
-        {
-          excludeMissionId: options?.excludeMissionId,
-        },
-      )
-      .getOne();
+      .andWhere('mission.plannedEnd > :plannedStart', { plannedStart });
+
+    if (options?.excludeMissionId) {
+      overlapQuery.andWhere('mission.id != :excludeMissionId', {
+        excludeMissionId: options.excludeMissionId,
+      });
+    }
+
+    const overlappingMission = await overlapQuery.getOne();
 
     if (overlappingMission) {
       if (options?.ownerIdForNotify) {
@@ -466,9 +496,7 @@ export class MissionsService {
           )
           .catch(() => undefined);
       }
-      throw new BadRequestException(
-        'The selected drone already has an overlapping mission.',
-      );
+      throw new MissionOverlapException(droneId, plannedStart, plannedEnd);
     }
   }
 }

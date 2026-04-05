@@ -26,6 +26,15 @@ export function DroneRegistryTableRow({ drone }: DroneRegistryTableRowProps) {
       </td>
       <td>{drone.totalFlightHours.toFixed(1)}h</td>
       <td>{new Date(drone.nextMaintenanceDueDate).toLocaleDateString()}</td>
+      <td className="muted" style={{ fontSize: '0.82rem' }}>
+        {drone.registeredAt
+          ? new Date(drone.registeredAt).toLocaleDateString(undefined, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })
+          : '—'}
+      </td>
       <td className="table-actions">
         <Link
           className="button secondary table-details-link"
