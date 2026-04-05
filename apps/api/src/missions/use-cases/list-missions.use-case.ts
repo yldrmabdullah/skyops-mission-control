@@ -21,7 +21,9 @@ export class ListMissionsUseCase {
       startDate: query.startDate,
       endDate: query.endDate,
       droneId: query.droneId,
-      order: query.sortBy ? { [query.sortBy]: query.sortOrder || 'ASC' } : undefined,
+      order: query.sortBy
+        ? { [query.sortBy]: query.sortOrder || 'ASC' }
+        : undefined,
     });
 
     return {

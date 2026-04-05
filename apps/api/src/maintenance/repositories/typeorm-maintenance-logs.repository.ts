@@ -1,8 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  Between,
+  type DeepPartial,
+  FindOptionsWhere,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { MaintenanceLog } from '../entities/maintenance-log.entity';
-import { IMaintenanceLogsRepository } from './maintenance-logs.repository.interface';
+import {
+  IMaintenanceLogsRepository,
+  MaintenanceLogsListQueryOptions,
+} from './maintenance-logs.repository.interface';
 
 @Injectable()
 export class TypeOrmMaintenanceLogsRepository implements IMaintenanceLogsRepository {
@@ -12,14 +22,19 @@ export class TypeOrmMaintenanceLogsRepository implements IMaintenanceLogsReposit
   ) {}
 
   async findOne(id: string): Promise<MaintenanceLog | null> {
-    return this.repository.findOne({ 
+    return this.repository.findOne({
       where: { id },
-      relations: { drone: true }
+      relations: { drone: true },
     });
   }
 
-  async findAll(ownerId: string, options: any): Promise<[MaintenanceLog[], number]> {
-    const where: any = { drone: { ownerId } };
+  async findAll(
+    ownerId: string,
+    options: MaintenanceLogsListQueryOptions,
+  ): Promise<[MaintenanceLog[], number]> {
+    const where: FindOptionsWhere<MaintenanceLog> = {
+      drone: { ownerId },
+    };
 
     if (options.droneId) {
       where.droneId = options.droneId;
@@ -27,7 +42,10 @@ export class TypeOrmMaintenanceLogsRepository implements IMaintenanceLogsReposit
 
     if (options.startDate || options.endDate) {
       if (options.startDate && options.endDate) {
-        where.performedAt = Between(new Date(options.startDate), new Date(options.endDate));
+        where.performedAt = Between(
+          new Date(options.startDate),
+          new Date(options.endDate),
+        );
       } else if (options.startDate) {
         where.performedAt = MoreThanOrEqual(new Date(options.startDate));
       } else if (options.endDate) {
@@ -40,7 +58,7 @@ export class TypeOrmMaintenanceLogsRepository implements IMaintenanceLogsReposit
       skip: options.skip,
       take: options.take,
       relations: { drone: true },
-      order: { performedAt: 'DESC' }
+      order: { performedAt: 'DESC' },
     });
   }
 
@@ -52,7 +70,7 @@ export class TypeOrmMaintenanceLogsRepository implements IMaintenanceLogsReposit
     return this.repository.count({ where: { droneId } });
   }
 
-  create(props: any): MaintenanceLog {
+  create(props: DeepPartial<MaintenanceLog>): MaintenanceLog {
     return this.repository.create(props) as unknown as MaintenanceLog;
   }
 }

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
-import { Drone } from '../drones/entities/drone.entity';
+import { DronePersistenceModule } from '../drones/drone-persistence.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WorkspaceContextModule } from '../common/workspace-context/workspace-context.module';
 import { Mission } from './entities/mission.entity';
@@ -16,7 +16,8 @@ import { GetMissionUseCase } from './use-cases/get-mission.use-case';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Mission, Drone]),
+    DronePersistenceModule,
+    TypeOrmModule.forFeature([Mission]),
     AuditModule,
     NotificationsModule,
     WorkspaceContextModule,

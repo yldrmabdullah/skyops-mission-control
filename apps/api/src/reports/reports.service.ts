@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { WorkspaceContext } from '../common/workspace-context/workspace-context';
-import { MissionStatus } from '../missions/entities/mission.entity';
 import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
 import { IMissionsRepository } from '../missions/repositories/missions.repository.interface';
 import { IMaintenanceLogsRepository } from '../maintenance/repositories/maintenance-logs.repository.interface';
@@ -19,7 +18,10 @@ export class ReportsService {
 
   async getFleetHealthReport() {
     const ownerId = this.workspaceContext.fleetOwnerId;
-    const [drones] = await this.dronesRepository.findAll({ ownerId }, { skip: 0, take: 1000 });
+    const [drones] = await this.dronesRepository.findAll(ownerId, {
+      skip: 0,
+      take: 1000,
+    });
 
     const totalCount = drones.length;
     const statusBreakdown = drones.reduce<Record<string, number>>(
@@ -30,13 +32,17 @@ export class ReportsService {
       {},
     );
 
-    const overdueMaintenance = drones.filter((drone) => drone.isMaintenanceDue());
+    const overdueMaintenance = drones.filter((drone) =>
+      drone.isMaintenanceDue(),
+    );
 
     // For simplicity in this refactor, we are using the filtered drones list
     // In a real scenario, we might want a more specific repository method for "Upcoming Missions"
     let upcomingMissionsCount = 0;
     for (const drone of drones) {
-      upcomingMissionsCount += await this.missionsRepository.countByDroneId(drone.id);
+      upcomingMissionsCount += await this.missionsRepository.countByDroneId(
+        drone.id,
+      );
     }
 
     const averageFlightHoursPerDrone =
@@ -60,7 +66,10 @@ export class ReportsService {
 
   async getOperationalAnalytics() {
     const ownerId = this.workspaceContext.fleetOwnerId;
-    const [drones] = await this.dronesRepository.findAll({ ownerId }, { skip: 0, take: 1000 });
+    const [drones] = await this.dronesRepository.findAll(ownerId, {
+      skip: 0,
+      take: 1000,
+    });
 
     const droneModelBreakdown = drones.reduce<Record<string, number>>(
       (acc, drone) => {
@@ -86,12 +95,18 @@ export class ReportsService {
     // In a real scenario, these should be optimized into the Repository layer
     // For now, we are maintaining functional equivalence with the interface
     const missionStatusBreakdown: Record<string, number> = {};
-    const [maintenanceLogs] = await this.maintenanceLogsRepository.findAll(ownerId, { skip: 0, take: 1000 });
+    const [maintenanceLogs] = await this.maintenanceLogsRepository.findAll(
+      ownerId,
+      { skip: 0, take: 1000 },
+    );
 
-    const technicianStats = maintenanceLogs.reduce<Record<string, number>>((acc, log) => {
-      acc[log.technicianName] = (acc[log.technicianName] ?? 0) + 1;
-      return acc;
-    }, {});
+    const technicianStats = maintenanceLogs.reduce<Record<string, number>>(
+      (acc, log) => {
+        acc[log.technicianName] = (acc[log.technicianName] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
 
     const maintenanceByTechnician = Object.entries(technicianStats)
       .map(([technicianName, count]) => ({ technicianName, count }))

@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, Scope } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { WorkspaceContext } from './workspace-context';
 import { WorkspaceContextInterceptor } from './workspace-context.interceptor';
@@ -9,6 +9,7 @@ import { WorkspaceContextInterceptor } from './workspace-context.interceptor';
     WorkspaceContext,
     {
       provide: APP_INTERCEPTOR,
+      scope: Scope.REQUEST,
       useClass: WorkspaceContextInterceptor,
     },
   ],

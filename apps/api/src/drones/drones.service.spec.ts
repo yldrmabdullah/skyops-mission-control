@@ -1,13 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { OperatorRole } from '../auth/operator-role.enum';
 import { WorkspaceContext } from '../common/workspace-context/workspace-context';
-import {
-  DroneListSortField,
-  DroneListSortOrder,
-} from './dto/drone-list-sort.enum';
 import { DronesService } from './drones.service';
 import { Drone, DroneModel, DroneStatus } from './entities/drone.entity';
 import { IDronesRepository } from './repositories/drones.repository.interface';
@@ -44,12 +39,6 @@ describe('DronesService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DronesService,
-        {
-          provide: DataSource,
-          useValue: {
-            createQueryRunner: jest.fn(),
-          },
-        },
         {
           provide: IDronesRepository,
           useValue: {
@@ -93,8 +82,9 @@ describe('DronesService', () => {
 
   describe('create', () => {
     it('should successfully create a new drone', async () => {
-      jest.spyOn(dronesRepository, 'findBySerialNumber').mockResolvedValue(null);
-      jest.spyOn(dronesRepository, 'create').mockReturnValue(mockDrone);
+      jest
+        .spyOn(dronesRepository, 'findBySerialNumber')
+        .mockResolvedValue(null);
       jest.spyOn(dronesRepository, 'save').mockResolvedValue(mockDrone);
 
       const result = await service.create({
@@ -136,7 +126,9 @@ describe('DronesService', () => {
 
   describe('findAll', () => {
     it('should return a list of drones with metadata', async () => {
-      jest.spyOn(dronesRepository, 'findAll').mockResolvedValue([[mockDrone], 1]);
+      jest
+        .spyOn(dronesRepository, 'findAll')
+        .mockResolvedValue([[mockDrone], 1]);
       const result = await service.findAll({ page: 1, limit: 10 });
       expect(result.data).toHaveLength(1);
       expect(result.meta.total).toBe(1);
@@ -161,7 +153,7 @@ describe('DronesService', () => {
     });
 
     it('should allow updating other fields if status is not changing to AVAILABLE', async () => {
-      const drone = { 
+      const drone = {
         ...mockDrone,
         isMaintenanceDue: () => false,
       } as Drone;

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { IMissionsRepository } from '../repositories/missions.repository.interface';
 import { IDronesRepository } from '../../drones/repositories/drones.repository.interface';
 import { WorkspaceContext } from '../../common/workspace-context/workspace-context';
@@ -24,7 +29,6 @@ export class TransitionMissionUseCase {
 
   async execute(id: string, dto: TransitionMissionDto) {
     const fleetOwnerId = this.workspaceContext.fleetOwnerId;
-    const actorId = this.workspaceContext.actorId;
 
     const mission = await this.missionsRepository.findOne(id, fleetOwnerId);
     if (!mission) {
@@ -36,27 +40,37 @@ export class TransitionMissionUseCase {
     mission.status = dto.status;
     if (dto.status === MissionStatus.IN_PROGRESS) {
       if (mission.drone.status !== DroneStatus.AVAILABLE) {
-         throw new ConflictException(`Drone ${mission.drone.id} is not available.`);
+        throw new ConflictException(
+          `Drone ${mission.drone.id} is not available.`,
+        );
       }
       mission.actualStart = new Date();
       mission.drone.status = DroneStatus.IN_MISSION;
     } else if (dto.status === MissionStatus.COMPLETED) {
       if (!dto.flightHoursLogged) {
-        throw new BadRequestException('Completing a mission requires flight hours.');
+        throw new BadRequestException(
+          'Completing a mission requires flight hours.',
+        );
       }
       mission.actualEnd = new Date();
       mission.flightHoursLogged = dto.flightHoursLogged;
-      
-      const totalFlightHours = Number(((mission.drone.totalFlightHours || 0) + (dto.flightHoursLogged || 0)).toFixed(1));
+
+      const totalFlightHours = Number(
+        (
+          (mission.drone.totalFlightHours || 0) + (dto.flightHoursLogged || 0)
+        ).toFixed(1),
+      );
       mission.drone.totalFlightHours = totalFlightHours;
-      mission.drone.status = resolveDroneStatusAfterMissionCompletion(mission.drone);
-      
+      mission.drone.status = resolveDroneStatusAfterMissionCompletion(
+        mission.drone,
+      );
+
       mission.drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
         mission.drone.lastMaintenanceDate,
         mission.drone.totalFlightHours,
-        mission.drone.flightHoursAtLastMaintenance
+        mission.drone.flightHoursAtLastMaintenance,
       );
-      
+
       void this.notificationsService
         .notifyMaintenanceDueStub(fleetOwnerId, mission.drone.serialNumber)
         .catch(() => undefined);
