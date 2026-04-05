@@ -39,36 +39,26 @@ export class DronesController {
   @ApiResponse({ status: 409, description: 'Serial number conflict' })
   @UseGuards(RolesGuard)
   @Roles(OperatorRole.MANAGER)
-  create(
-    @CurrentUser() user: JwtPayloadUser,
-    @Body() createDroneDto: CreateDroneDto,
-  ) {
-    return this.dronesService.create(
-      createDroneDto,
-      user.fleetOwnerId,
-      user.userId,
-    );
+  create(@Body() createDroneDto: CreateDroneDto) {
+    return this.dronesService.create(createDroneDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List drones for the current operator' })
   @ApiResponse({ status: 200, description: 'Paginated drones' })
-  findAll(
-    @CurrentUser() user: JwtPayloadUser,
-    @Query() query: ListDronesQueryDto,
-  ) {
-    return this.dronesService.findAll(query, user.fleetOwnerId);
+  findAll(@Query() query: ListDronesQueryDto) {
+    return this.dronesService.findAll(query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get one drone with relations' })
   @ApiResponse({ status: 200, description: 'Drone detail' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  findOne(
+  async findOne(
     @CurrentUser() user: JwtPayloadUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.dronesService.findOne(id, user.fleetOwnerId, user.role);
+    return this.dronesService.findOne(id, user.role);
   }
 
   @Patch(':id')
@@ -79,16 +69,10 @@ export class DronesController {
   @UseGuards(RolesGuard)
   @Roles(OperatorRole.MANAGER)
   update(
-    @CurrentUser() user: JwtPayloadUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDroneDto: UpdateDroneDto,
   ) {
-    return this.dronesService.update(
-      id,
-      updateDroneDto,
-      user.fleetOwnerId,
-      user.userId,
-    );
+    return this.dronesService.update(id, updateDroneDto);
   }
 
   @Delete(':id')
@@ -99,10 +83,7 @@ export class DronesController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @UseGuards(RolesGuard)
   @Roles(OperatorRole.MANAGER)
-  remove(
-    @CurrentUser() user: JwtPayloadUser,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.dronesService.remove(id, user.fleetOwnerId, user.userId);
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.dronesService.remove(id);
   }
 }

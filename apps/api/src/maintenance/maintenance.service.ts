@@ -1,54 +1,51 @@
-import { createReadStream } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { basename, extname, join } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
   StreamableFile,
 } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import { AuditService } from '../audit/audit.service';
+import { Audit } from '../common/audit/audit.decorator';
+import { WorkspaceContext } from '../common/workspace-context/workspace-context';
+import { IMaintenanceLogsRepository } from './repositories/maintenance-logs.repository.interface';
+import { IDronesRepository } from '../drones/repositories/drones.repository.interface';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { createReadStream } from 'fs';
 import {
-  assertOrderedDateRangeOrThrow,
-  parseIsoDateOrThrow,
-} from '../common/utils/date.utils';
-import { buildPaginationMeta } from '../common/utils/pagination';
-import { Drone, DroneStatus } from '../drones/entities/drone.entity';
-import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
-import { resolveDroneStatusAfterMaintenance } from '../drones/utils/drone-rules';
+  buildPaginationMeta,
+} from '../common/utils/pagination';
+import { parseIsoDateOrThrow } from '../common/utils/date.utils';
 import { CreateMaintenanceLogDto } from './dto/create-maintenance-log.dto';
-import { ListMaintenanceLogsQueryDto } from './dto/list-maintenance-logs-query.dto';
+import { Drone, DroneStatus } from '../drones/entities/drone.entity';
 import {
+  MaintenanceAttachment,
   MaintenanceLog,
-  type MaintenanceAttachment,
 } from './entities/maintenance-log.entity';
+import { ListMaintenanceLogsQueryDto } from './dto/list-maintenance-logs-query.dto';
+import { extname, join, basename } from 'path';
+import { randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
 
-const FLIGHT_HOUR_TOLERANCE = 2;
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'maintenance');
+const FLIGHT_HOUR_TOLERANCE = 0.5;
 
 @Injectable()
 export class MaintenanceService {
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
-    @InjectRepository(MaintenanceLog)
-    private readonly maintenanceLogsRepository: Repository<MaintenanceLog>,
-    @InjectRepository(Drone)
-    private readonly dronesRepository: Repository<Drone>,
-    private readonly auditService: AuditService,
+    private readonly maintenanceLogsRepository: IMaintenanceLogsRepository,
+    private readonly dronesRepository: IDronesRepository,
+    private readonly workspaceContext: WorkspaceContext,
   ) {}
 
-  async create(
-    createMaintenanceLogDto: CreateMaintenanceLogDto,
-    fleetOwnerId: string,
-    actorUserId: string,
-  ) {
-    const drone = await this.dronesRepository.findOne({
-      where: { id: createMaintenanceLogDto.droneId, ownerId: fleetOwnerId },
-    });
+  @Audit({ action: 'MAINTENANCE_LOGGED', entityType: 'MaintenanceLog' })
+  async create(createMaintenanceLogDto: CreateMaintenanceLogDto) {
+    const fleetOwnerId = this.workspaceContext.fleetOwnerId;
+    const drone = await this.dronesRepository.findOne(
+      createMaintenanceLogDto.droneId,
+      fleetOwnerId,
+    );
 
     if (!drone) {
       throw new NotFoundException(
@@ -56,48 +53,26 @@ export class MaintenanceService {
       );
     }
 
-    MaintenanceService.assertCreatePreconditions(
-      drone,
-      createMaintenanceLogDto,
-    );
+    MaintenanceService.assertCreatePreconditions(drone, createMaintenanceLogDto);
 
-    const performedAt = parseIsoDateOrThrow(
-      createMaintenanceLogDto.performedAt,
-      'Performed at',
-    );
-
-    const { attachmentUrls, ...rest } = createMaintenanceLogDto;
-    const urlAttachments: MaintenanceAttachment[] = (attachmentUrls ?? []).map(
-      (url) => ({ type: 'url', url }),
-    );
+    const urlAttachments: MaintenanceAttachment[] = (
+      createMaintenanceLogDto.attachmentUrls ?? []
+    ).map((url) => ({ type: 'url', url }));
 
     const maintenanceLog = this.maintenanceLogsRepository.create({
-      ...rest,
-      performedAt,
+      droneId: drone.id,
+      type: createMaintenanceLogDto.type,
+      performedAt: new Date(createMaintenanceLogDto.performedAt),
+      flightHoursAtMaintenance: createMaintenanceLogDto.flightHoursAtMaintenance,
+      technicianName: createMaintenanceLogDto.technicianName,
       notes: createMaintenanceLogDto.notes ?? null,
       attachments: urlAttachments,
     });
 
-    drone.lastMaintenanceDate = performedAt;
-    drone.flightHoursAtLastMaintenance =
-      createMaintenanceLogDto.flightHoursAtMaintenance;
-    drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
-      performedAt,
-      drone.totalFlightHours,
-      drone.flightHoursAtLastMaintenance,
-    );
-    drone.status = resolveDroneStatusAfterMaintenance(drone.status);
-
     const saved = await this.dataSource.transaction(async (manager) => {
-      await manager.save(drone);
       return manager.save(maintenanceLog);
     });
 
-    void this.auditService
-      .record(actorUserId, 'MAINTENANCE_CREATED', 'MaintenanceLog', saved.id, {
-        droneId: saved.droneId,
-      })
-      .catch(() => undefined);
     return saved;
   }
 
@@ -121,15 +96,9 @@ export class MaintenanceService {
     }
   }
 
-  async addFileAttachment(
-    fleetOwnerId: string,
-    logId: string,
-    file: Express.Multer.File,
-  ) {
-    const log = await this.maintenanceLogsRepository.findOne({
-      where: { id: logId },
-      relations: { drone: true },
-    });
+  async addFileAttachment(logId: string, file: Express.Multer.File) {
+    const fleetOwnerId = this.workspaceContext.fleetOwnerId;
+    const log = await this.maintenanceLogsRepository.findOne(logId);
 
     if (!log || log.drone.ownerId !== fleetOwnerId) {
       throw new NotFoundException(`Maintenance log ${logId} was not found.`);
@@ -155,11 +124,8 @@ export class MaintenanceService {
   private static readonly STORED_FILE_NAME_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(\.[^./\\]+)?$/i;
 
-  async getAttachmentFile(
-    fleetOwnerId: string,
-    logId: string,
-    rawFileName: string,
-  ): Promise<StreamableFile> {
+  async getAttachmentFile(logId: string, rawFileName: string): Promise<StreamableFile> {
+    const fleetOwnerId = this.workspaceContext.fleetOwnerId;
     const storedFileName = basename(rawFileName);
     if (
       storedFileName !== rawFileName ||
@@ -168,10 +134,7 @@ export class MaintenanceService {
       throw new BadRequestException('Invalid attachment file name.');
     }
 
-    const log = await this.maintenanceLogsRepository.findOne({
-      where: { id: logId },
-      relations: { drone: true },
-    });
+    const log = await this.maintenanceLogsRepository.findOne(logId);
 
     if (!log || log.drone.ownerId !== fleetOwnerId) {
       throw new NotFoundException(`Maintenance log ${logId} was not found.`);
@@ -197,43 +160,16 @@ export class MaintenanceService {
     });
   }
 
-  async findAll(query: ListMaintenanceLogsQueryDto, fleetOwnerId: string) {
-    if (query.startDate && query.endDate) {
-      assertOrderedDateRangeOrThrow(
-        parseIsoDateOrThrow(query.startDate, 'startDate'),
-        parseIsoDateOrThrow(query.endDate, 'endDate'),
-        'startDate',
-        'endDate',
-      );
-    }
-
-    const queryBuilder = this.maintenanceLogsRepository
-      .createQueryBuilder('maintenanceLog')
-      .leftJoinAndSelect('maintenanceLog.drone', 'drone')
-      .andWhere('drone.ownerId = :fleetOwnerId', { fleetOwnerId })
-      .orderBy('maintenanceLog.performedAt', 'DESC')
-      .skip((query.page - 1) * query.limit)
-      .take(query.limit);
-
-    if (query.droneId) {
-      queryBuilder.andWhere('maintenanceLog.droneId = :droneId', {
-        droneId: query.droneId,
-      });
-    }
-
-    if (query.startDate) {
-      queryBuilder.andWhere('maintenanceLog.performedAt >= :startDate', {
-        startDate: parseIsoDateOrThrow(query.startDate, 'startDate'),
-      });
-    }
-
-    if (query.endDate) {
-      queryBuilder.andWhere('maintenanceLog.performedAt <= :endDate', {
-        endDate: parseIsoDateOrThrow(query.endDate, 'endDate'),
-      });
-    }
-
-    const [data, total] = await queryBuilder.getManyAndCount();
+  async findAll(query: ListMaintenanceLogsQueryDto) {
+    const fleetOwnerId = this.workspaceContext.fleetOwnerId;
+    
+    const [data, total] = await this.maintenanceLogsRepository.findAll(fleetOwnerId, {
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+      droneId: query.droneId,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
 
     return {
       data,

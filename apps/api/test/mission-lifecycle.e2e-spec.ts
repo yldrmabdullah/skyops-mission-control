@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { DataType, newDb } from 'pg-mem';
 import { User } from '../src/auth/entities/user.entity';
 import {
@@ -14,15 +14,19 @@ import {
   MissionStatus,
   MissionType,
 } from '../src/missions/entities/mission.entity';
-import { MissionsService } from '../src/missions/missions.service';
+import { CreateMissionUseCase } from '../src/missions/use-cases/create-mission.use-case';
+import { TransitionMissionUseCase } from '../src/missions/use-cases/transition-mission.use-case';
+import { TypeOrmMissionsRepository } from '../src/missions/repositories/typeorm-missions.repository';
+import { TypeOrmDronesRepository } from '../src/drones/repositories/typeorm-drones.repository';
+import { TypeOrmMaintenanceLogsRepository } from '../src/maintenance/repositories/typeorm-maintenance-logs.repository';
+import { WorkspaceContext } from '../src/common/workspace-context/workspace-context';
 
 describe('Mission lifecycle integration', () => {
   let dataSource: DataSource;
   let dronesService: DronesService;
-  let missionsService: MissionsService;
-  let droneRepository: Repository<Drone>;
-  let missionRepository: Repository<Mission>;
-  let maintenanceLogRepository: Repository<MaintenanceLog>;
+  let createMissionUseCase: CreateMissionUseCase;
+  let transitionMissionUseCase: TransitionMissionUseCase;
+  let workspaceContext: WorkspaceContext;
   let ownerId: string;
 
   beforeEach(async () => {
@@ -47,18 +51,18 @@ describe('Mission lifecycle integration', () => {
       impure: true,
     });
 
-    dataSource = database.adapters.createTypeormDataSource({
+    dataSource = (await database.adapters.createTypeormDataSource({
       type: 'postgres',
       entities: [User, Drone, Mission, MaintenanceLog],
       synchronize: true,
-    }) as DataSource;
+    })) as DataSource;
 
     await dataSource.initialize();
 
-    droneRepository = dataSource.getRepository(Drone);
-    missionRepository = dataSource.getRepository(Mission);
-    maintenanceLogRepository = dataSource.getRepository(MaintenanceLog);
     const userRepository = dataSource.getRepository(User);
+    const missionRepository = dataSource.getRepository(Mission);
+    const droneRepository = dataSource.getRepository(Drone);
+    const maintenanceLogRepository = dataSource.getRepository(MaintenanceLog);
 
     const owner = await userRepository.save(
       userRepository.create({
@@ -69,24 +73,44 @@ describe('Mission lifecycle integration', () => {
     );
     ownerId = owner.id;
 
-    const auditService = { record: jest.fn().mockResolvedValue(undefined) };
+    workspaceContext = {
+      fleetOwnerId: ownerId,
+      userId: ownerId,
+    } as WorkspaceContext;
+
+    const auditService = { record: jest.fn().mockResolvedValue(undefined) } as any;
     const notificationsService = {
       notifyScheduleConflictIfEnabled: jest.fn().mockResolvedValue(undefined),
       notifyMaintenanceDueStub: jest.fn().mockResolvedValue(undefined),
-    };
+    } as any;
+
+    const missionsRepo = new TypeOrmMissionsRepository(missionRepository);
+    const dronesRepo = new TypeOrmDronesRepository(droneRepository);
+    const maintRepo = new TypeOrmMaintenanceLogsRepository(maintenanceLogRepository);
 
     dronesService = new DronesService(
-      droneRepository,
-      missionRepository,
-      maintenanceLogRepository,
-      auditService as never,
-    );
-    missionsService = new MissionsService(
       dataSource,
-      missionRepository,
-      droneRepository,
-      auditService as never,
-      notificationsService as never,
+      dronesRepo,
+      missionsRepo,
+      maintRepo,
+      auditService,
+      workspaceContext,
+    );
+
+    createMissionUseCase = new CreateMissionUseCase(
+      missionsRepo,
+      dronesRepo,
+      auditService,
+      notificationsService,
+      workspaceContext,
+    );
+
+    transitionMissionUseCase = new TransitionMissionUseCase(
+      dataSource,
+      missionsRepo,
+      dronesRepo,
+      notificationsService,
+      workspaceContext,
     );
   });
 
@@ -95,59 +119,36 @@ describe('Mission lifecycle integration', () => {
   });
 
   it('creates a drone, schedules a mission, completes it, and updates maintenance state', async () => {
-    const drone = await dronesService.create(
-      {
-        serialNumber: 'SKY-A1B2-C3D4',
-        model: DroneModel.MATRICE_300,
-        totalFlightHours: 49,
-        flightHoursAtLastMaintenance: 0,
-        lastMaintenanceDate: '2026-03-01T00:00:00.000Z',
-      },
-      ownerId,
-      ownerId,
-    );
+    const drone = await dronesService.create({
+      serialNumber: 'SKY-A1B2-C3D4',
+      model: DroneModel.MATRICE_300,
+      totalFlightHours: 49,
+      flightHoursAtLastMaintenance: 0,
+      lastMaintenanceDate: '2026-03-01T00:00:00.000Z',
+    });
 
-    const mission = await missionsService.create(
-      {
-        name: 'Turbine inspection alpha',
-        type: MissionType.WIND_TURBINE_INSPECTION,
-        droneId: drone.id,
-        pilotName: 'Amelia Stone',
-        siteLocation: 'Hamburg, Germany',
-        plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-      },
-      ownerId,
-      ownerId,
-    );
+    const mission = await createMissionUseCase.execute({
+      name: 'Turbine inspection alpha',
+      type: MissionType.WIND_TURBINE_INSPECTION,
+      droneId: drone.id,
+      pilotName: 'Amelia Stone',
+      siteLocation: 'Hamburg, Germany',
+      plannedStart: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    });
 
-    await missionsService.transition(
-      mission.id,
-      {
-        status: MissionStatus.PRE_FLIGHT_CHECK,
-      },
-      ownerId,
-      ownerId,
-    );
-    await missionsService.transition(
-      mission.id,
-      {
-        status: MissionStatus.IN_PROGRESS,
-      },
-      ownerId,
-      ownerId,
-    );
-    const completedMission = await missionsService.transition(
-      mission.id,
-      {
-        status: MissionStatus.COMPLETED,
-        flightHoursLogged: 2,
-      },
-      ownerId,
-      ownerId,
-    );
+    await transitionMissionUseCase.execute(mission.id, {
+      status: MissionStatus.PRE_FLIGHT_CHECK,
+    });
+    await transitionMissionUseCase.execute(mission.id, {
+      status: MissionStatus.IN_PROGRESS,
+    });
+    const completedMission = await transitionMissionUseCase.execute(mission.id, {
+      status: MissionStatus.COMPLETED,
+      flightHoursLogged: 2,
+    });
 
-    const updatedDrone = await droneRepository.findOneByOrFail({
+    const updatedDrone = await dataSource.getRepository(Drone).findOneByOrFail({
       id: drone.id,
     });
 

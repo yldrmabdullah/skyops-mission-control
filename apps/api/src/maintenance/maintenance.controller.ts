@@ -35,47 +35,34 @@ const uploadMemory = memoryStorage();
 
 @ApiTags('Maintenance')
 @ApiBearerAuth('access-token')
+@UseGuards(RolesGuard)
 @Controller('maintenance-logs')
 export class MaintenanceController {
   constructor(private readonly maintenanceService: MaintenanceService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create maintenance log' })
+  @ApiOperation({ summary: 'Log maintenance performed (Manager only)' })
   @ApiResponse({ status: 201, description: 'Log created' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
   @ApiResponse({ status: 404, description: 'Drone not found' })
-  @UseGuards(RolesGuard)
-  @Roles(OperatorRole.TECHNICIAN, OperatorRole.MANAGER)
-  create(
-    @CurrentUser() user: JwtPayloadUser,
-    @Body() createMaintenanceLogDto: CreateMaintenanceLogDto,
-  ) {
-    return this.maintenanceService.create(
-      createMaintenanceLogDto,
-      user.fleetOwnerId,
-      user.userId,
-    );
+  @Roles(OperatorRole.MANAGER)
+  create(@Body() createBatchDto: CreateMaintenanceLogDto) {
+    return this.maintenanceService.create(createBatchDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List maintenance logs' })
+  @ApiOperation({ summary: 'List maintenance logs for the operator fleet' })
   @ApiResponse({ status: 200, description: 'Paginated logs' })
-  @ApiResponse({ status: 403, description: 'Insufficient role' })
-  @UseGuards(RolesGuard)
   @Roles(OperatorRole.TECHNICIAN, OperatorRole.MANAGER)
-  findAll(
-    @CurrentUser() user: JwtPayloadUser,
-    @Query() query: ListMaintenanceLogsQueryDto,
-  ) {
-    return this.maintenanceService.findAll(query, user.fleetOwnerId);
+  findAll(@Query() query: ListMaintenanceLogsQueryDto) {
+    return this.maintenanceService.findAll(query);
   }
 
   @Post(':id/attachments')
-  @ApiOperation({ summary: 'Upload file attachment for a log' })
+  @ApiOperation({ summary: 'Upload an attachment to a log' })
   @ApiResponse({ status: 201, description: 'Log with new attachment' })
   @ApiResponse({ status: 400, description: 'Invalid file' })
-  @UseGuards(RolesGuard)
-  @Roles(OperatorRole.TECHNICIAN, OperatorRole.MANAGER)
+  @Roles(OperatorRole.MANAGER)
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -103,7 +90,6 @@ export class MaintenanceController {
     }),
   )
   uploadAttachment(
-    @CurrentUser() user: JwtPayloadUser,
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
@@ -111,7 +97,7 @@ export class MaintenanceController {
       throw new BadRequestException('File is required.');
     }
 
-    return this.maintenanceService.addFileAttachment(user.userId, id, file);
+    return this.maintenanceService.addFileAttachment(id, file);
   }
 
   @Get(':id/attachments/:storedFileName')
@@ -126,17 +112,11 @@ export class MaintenanceController {
   @ApiResponse({ status: 400, description: 'Invalid file name' })
   @ApiResponse({ status: 403, description: 'Insufficient role' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  @UseGuards(RolesGuard)
   @Roles(OperatorRole.TECHNICIAN, OperatorRole.MANAGER)
   downloadAttachment(
-    @CurrentUser() user: JwtPayloadUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('storedFileName') storedFileName: string,
   ) {
-    return this.maintenanceService.getAttachmentFile(
-      user.fleetOwnerId,
-      id,
-      storedFileName,
-    );
+    return this.maintenanceService.getAttachmentFile(id, storedFileName);
   }
 }

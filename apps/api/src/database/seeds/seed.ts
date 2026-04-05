@@ -21,6 +21,7 @@ import {
   MissionType,
 } from '../../missions/entities/mission.entity';
 import { InAppNotification } from '../../notifications/entities/in-app-notification.entity';
+import type { Repository } from 'typeorm';
 
 const droneModels = Object.values(DroneModel);
 const missionTypes = Object.values(MissionType);
@@ -48,31 +49,23 @@ function droneStatusForIndex(index: number): DroneStatus {
   return DroneStatus.AVAILABLE;
 }
 
-export async function runSeed() {
-  await dataSource.initialize();
-
-  const droneRepository = dataSource.getRepository(Drone);
-  const missionRepository = dataSource.getRepository(Mission);
-  const maintenanceRepository = dataSource.getRepository(MaintenanceLog);
-  const userRepository = dataSource.getRepository(User);
-  const notificationRepository = dataSource.getRepository(InAppNotification);
-  const auditRepository = dataSource.getRepository(AuditEvent);
-
-  await notificationRepository
-    .createQueryBuilder()
-    .delete()
-    .from(InAppNotification)
-    .execute();
-  await auditRepository
-    .createQueryBuilder()
-    .delete()
-    .from(AuditEvent)
-    .execute();
-  /** One statement: Postgres rejects truncating `drones` while child tables still reference it. */
-  await dataSource.query(
-    'TRUNCATE TABLE maintenance_logs, missions, drones RESTART IDENTITY CASCADE',
+function logDemoCredentials() {
+  console.info('');
+  console.info('── Demo workspace (password for all: SkyOpsDemo1) ──');
+  console.info(`  Manager:      ${DEMO_MANAGER_EMAIL}`);
+  console.info(
+    `  Pilot:        ${DEMO_PILOT_EMAIL}  (must change password on first sign-in)`,
   );
+  console.info(`  Technician:   ${DEMO_TECH_EMAIL}`);
+  console.info(
+    '  Fleet data, notifications, and audit trail are scoped to the Manager workspace.',
+  );
+  console.info('──');
+}
 
+async function upsertDemoWorkspaceUsers(
+  userRepository: Repository<User>,
+): Promise<{ demoUser: User; pilotUser: User; techUser: User }> {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
   let demoUser = await userRepository.findOne({
@@ -154,6 +147,45 @@ export async function runSeed() {
     techUser.mustChangePassword = false;
     await userRepository.save(techUser);
   }
+
+  return { demoUser, pilotUser, techUser };
+}
+
+export async function runSeed() {
+  await dataSource.initialize();
+
+  const droneRepository = dataSource.getRepository(Drone);
+  const missionRepository = dataSource.getRepository(Mission);
+  const maintenanceRepository = dataSource.getRepository(MaintenanceLog);
+  const userRepository = dataSource.getRepository(User);
+  const notificationRepository = dataSource.getRepository(InAppNotification);
+  const auditRepository = dataSource.getRepository(AuditEvent);
+
+  if (process.env.SEED_DEMO_USERS_ONLY === 'true') {
+    await upsertDemoWorkspaceUsers(userRepository);
+    logDemoCredentials();
+    console.info('Demo users only — no fleet truncate or demo data reset.');
+    await dataSource.destroy();
+    return;
+  }
+
+  await notificationRepository
+    .createQueryBuilder()
+    .delete()
+    .from(InAppNotification)
+    .execute();
+  await auditRepository
+    .createQueryBuilder()
+    .delete()
+    .from(AuditEvent)
+    .execute();
+  /** One statement: Postgres rejects truncating `drones` while child tables still reference it. */
+  await dataSource.query(
+    'TRUNCATE TABLE maintenance_logs, missions, drones RESTART IDENTITY CASCADE',
+  );
+
+  const { demoUser, pilotUser, techUser } =
+    await upsertDemoWorkspaceUsers(userRepository);
 
   const drones: Drone[] = [];
 
@@ -387,17 +419,7 @@ export async function runSeed() {
   ];
   await auditRepository.save(auditRows);
 
-  console.info('');
-  console.info('── Demo workspace (password for all: SkyOpsDemo1) ──');
-  console.info(`  Manager:      ${DEMO_MANAGER_EMAIL}`);
-  console.info(
-    `  Pilot:        ${DEMO_PILOT_EMAIL}  (must change password on first sign-in)`,
-  );
-  console.info(`  Technician:   ${DEMO_TECH_EMAIL}`);
-  console.info(
-    '  Fleet data, notifications, and audit trail are scoped to the Manager workspace.',
-  );
-  console.info('──');
+  logDemoCredentials();
 
   console.info(
     `Seed complete: ${savedDrones.length} drones, ${savedMissions.length} missions, ${maintenanceLogs.length} maintenance logs.`,

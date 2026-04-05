@@ -13,6 +13,8 @@ import { DronesModule } from './drones/drones.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { MissionsModule } from './missions/missions.module';
 import { ReportsModule } from './reports/reports.module';
+import { WorkspaceContextModule } from './common/workspace-context/workspace-context.module';
+import { CommonAuditModule } from './common/audit/common-audit.module';
 
 @Module({
   controllers: [AppController],
@@ -33,6 +35,8 @@ import { ReportsModule } from './reports/reports.module';
     MissionsModule,
     MaintenanceModule,
     ReportsModule,
+    WorkspaceContextModule,
+    CommonAuditModule,
   ],
   providers: [
     JwtAuthGuard,
