@@ -92,9 +92,19 @@ export class ReportsService {
       };
     }
 
-    // In a real scenario, these should be optimized into the Repository layer
-    // For now, we are maintaining functional equivalence with the interface
-    const missionStatusBreakdown: Record<string, number> = {};
+    const [missions] = await this.missionsRepository.findAll(ownerId, {
+      skip: 0,
+      take: 10_000,
+    });
+
+    const missionStatusBreakdown = missions.reduce<Record<string, number>>(
+      (acc, mission) => {
+        acc[mission.status] = (acc[mission.status] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
+
     const [maintenanceLogs] = await this.maintenanceLogsRepository.findAll(
       ownerId,
       { skip: 0, take: 1000 },
