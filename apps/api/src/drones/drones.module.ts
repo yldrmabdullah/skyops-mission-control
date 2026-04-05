@@ -1,19 +1,22 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
-import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
-import { Mission } from '../missions/entities/mission.entity';
-import { Drone } from './entities/drone.entity';
+import { DronePersistenceModule } from './drone-persistence.module';
 import { DronesController } from './drones.controller';
 import { DronesService } from './drones.service';
+import { MissionsModule } from '../missions/missions.module';
+import { MaintenanceModule } from '../maintenance/maintenance.module';
+import { WorkspaceContextModule } from '../common/workspace-context/workspace-context.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Drone, Mission, MaintenanceLog]),
+    DronePersistenceModule,
     AuditModule,
+    MissionsModule,
+    MaintenanceModule,
+    WorkspaceContextModule,
   ],
   controllers: [DronesController],
   providers: [DronesService],
-  exports: [DronesService, TypeOrmModule],
+  exports: [DronesService, DronePersistenceModule],
 })
 export class DronesModule {}

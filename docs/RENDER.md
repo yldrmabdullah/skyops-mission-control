@@ -36,7 +36,14 @@ Optional local-style vars: `JWT_EXPIRES_IN` (default in app if unset).
 
 Health check path: `/api/health` (global prefix is `api`, so full path is correct in Blueprint).
 
-**Database / users:** On deploy, TypeORM runs **migrations** only (`migrationsRun: true` in `typeorm.config.ts`). There is **no** automatic Docker-style **seed** on Render. Existing Postgres data is **not** wiped; new migrations alter the schema in place. Demo or manager accounts must be created via **Sign up** (`POST /auth/register`) or by restoring a dump—unless you run a seed script manually against `DATABASE_URL`.
+**Database / users:** On deploy, TypeORM runs **migrations** only (`migrationsRun: true` in `typeorm.config.ts`). There is **no** automatic seed on Render. Existing Postgres data is **not** wiped; new migrations alter the schema in place.
+
+To add demo logins against a hosted DB from your machine, use the **External** `DATABASE_URL` from the Render Postgres dashboard (full hostname). From `apps/api` with `.env` containing `DATABASE_URL` (or export it in the shell):
+
+- **`pnpm seed`** — truncates demo fleet tables and repopulates drones/missions/logs **plus** upserts demo users (destructive to demo-scoped data).
+- **`pnpm seed:demo-users`** — **only** creates/updates the three demo users (`SEED_DEMO_USERS_ONLY=true`); does **not** truncate fleet data.
+
+Alternatively use **Sign up** (`POST /auth/register`) or restore a dump.
 
 ## Static Site — `VITE_API_BASE_URL`
 
@@ -71,6 +78,20 @@ Second Blueprint, branch **`dev`**, file **`render.dev.yaml`**. Uses separate DB
 2. Open `https://<api>/api/health` — expect JSON OK.
 3. Static site: sign-in and **`/sign-up`** (when the API reports an empty user table) hit the correct API (browser **Network** tab); confirm `GET …/auth/status` and `POST …/auth/login` or `register` as expected.
 4. If auth fails with network error, recheck **`VITE_API_BASE_URL`** and redeploy the static site.
+
+## “Network Error” / “Request failed” after recreating the Blueprint
+
+Axios shows **Network Error** when the browser never gets a normal API response (blocked request, wrong host, API down, or CORS rejection).
+
+1. **Confirm the real public URLs** in the Render dashboard (**each** service → top URL). Service **names** can stay `skyops-mission-control-api` while the **hostname** still matches; if Render ever assigns a different subdomain, `render.yaml` defaults are wrong until you fix env.
+2. **Static site → Environment**: `VITE_API_BASE_URL` must be exactly  
+   `https://<API public hostname>/api`  
+   (HTTPS, **no** trailing slash after `api`). Then **Manual Deploy → Clear build cache & deploy** so Vite rebuilds the bundle.
+3. **API → Environment**: `CORS_ORIGIN` must be exactly the static site origin, e.g.  
+   `https://skyops-mission-control-web.onrender.com`  
+   (no path, no trailing slash). Redeploy the API after changing it.
+4. **Sanity check in the browser**: DevTools → **Network** → failed login request. If the request URL is `https://skyops-mission-control-web.onrender.com/api/...`, the SPA was built **without** `VITE_API_BASE_URL` and is calling the wrong host — fix step 2.
+5. **Free tier**: first request after sleep can take ~30–60s; retry once. If the API **Logs** show crashes, fix DB/`JWT_SECRET` first.
 
 ## Related files
 
