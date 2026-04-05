@@ -1,27 +1,54 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, In, Not, Repository } from 'typeorm';
+import {
+  FindOptionsOrder,
+  FindOptionsWhere,
+  ILike,
+  In,
+  Not,
+  Repository,
+} from 'typeorm';
 import { parseIsoDateOrThrow } from '../common/utils/date.utils';
+import { AuditService } from '../audit/audit.service';
+import { OperatorRole } from '../auth/operator-role.enum';
 import { buildPaginationMeta } from '../common/utils/pagination';
 import { MaintenanceLog } from '../maintenance/entities/maintenance-log.entity';
 import { Mission, MissionStatus } from '../missions/entities/mission.entity';
 import { CreateDroneDto } from './dto/create-drone.dto';
+import {
+  DroneListSortField,
+  DroneListSortOrder,
+} from './dto/drone-list-sort.enum';
 import { ListDronesQueryDto } from './dto/list-drones-query.dto';
 import { UpdateDroneDto } from './dto/update-drone.dto';
 import { Drone, DroneStatus } from './entities/drone.entity';
 import {
   calculateNextMaintenanceDueDate,
   isMaintenanceDue,
+  isMaintenanceWatchlistCandidate,
 } from './utils/maintenance.utils';
 import {
   assertDroneCanBeDeleted,
   assertDroneCanBeRetired,
   assertValidFlightHoursSnapshot,
 } from './utils/drone-rules';
+
+function resolveDroneListOrder(
+  query: ListDronesQueryDto,
+): FindOptionsOrder<Drone> {
+  const field = query.sortBy ?? DroneListSortField.REGISTERED_AT;
+  const direction =
+    query.sortOrder ??
+    (field === DroneListSortField.REGISTERED_AT
+      ? DroneListSortOrder.DESC
+      : DroneListSortOrder.ASC);
+  return { [field]: direction };
+}
 
 @Injectable()
 export class DronesService {
@@ -32,11 +59,19 @@ export class DronesService {
     private readonly missionsRepository: Repository<Mission>,
     @InjectRepository(MaintenanceLog)
     private readonly maintenanceLogsRepository: Repository<MaintenanceLog>,
+    private readonly auditService: AuditService,
   ) {}
 
-  async create(createDroneDto: CreateDroneDto, ownerId: string) {
+  async create(
+    createDroneDto: CreateDroneDto,
+    fleetOwnerId: string,
+    actorUserId: string,
+  ) {
     const existingDrone = await this.dronesRepository.findOne({
-      where: { serialNumber: createDroneDto.serialNumber, ownerId },
+      where: {
+        serialNumber: createDroneDto.serialNumber,
+        ownerId: fleetOwnerId,
+      },
     });
 
     if (existingDrone) {
@@ -59,7 +94,7 @@ export class DronesService {
     );
 
     const drone = this.dronesRepository.create({
-      ownerId,
+      ownerId: fleetOwnerId,
       serialNumber: createDroneDto.serialNumber,
       model: createDroneDto.model,
       status: createDroneDto.status ?? DroneStatus.AVAILABLE,
@@ -73,22 +108,47 @@ export class DronesService {
       ),
     });
 
-    return this.dronesRepository.save(drone);
+    const saved = await this.dronesRepository.save(drone);
+    void this.auditService
+      .record(actorUserId, 'DRONE_CREATED', 'Drone', saved.id, {
+        serialNumber: saved.serialNumber,
+      })
+      .catch(() => undefined);
+    return saved;
   }
 
-  async findAll(query: ListDronesQueryDto, ownerId: string) {
-    const where: FindOptionsWhere<Drone> = { ownerId };
+  async findAll(query: ListDronesQueryDto, fleetOwnerId: string) {
+    const where: FindOptionsWhere<Drone> = { ownerId: fleetOwnerId };
 
     if (query.status) {
       where.status = query.status;
     }
 
-    const [data, total] = await this.dronesRepository.findAndCount({
+    const term = query.search?.trim();
+    if (term) {
+      where.serialNumber = ILike(`%${term}%`);
+    }
+
+    const [rows, total] = await this.dronesRepository.findAndCount({
       where,
-      order: { registeredAt: 'DESC' },
+      order: resolveDroneListOrder(query),
       skip: (query.page - 1) * query.limit,
       take: query.limit,
     });
+
+    const data = rows.map((drone) => ({
+      ...drone,
+      maintenanceDue: isMaintenanceDue({
+        totalFlightHours: drone.totalFlightHours,
+        flightHoursAtLastMaintenance: drone.flightHoursAtLastMaintenance,
+        nextMaintenanceDueDate: drone.nextMaintenanceDueDate,
+      }),
+      maintenanceWatchlist: isMaintenanceWatchlistCandidate({
+        totalFlightHours: drone.totalFlightHours,
+        flightHoursAtLastMaintenance: drone.flightHoursAtLastMaintenance,
+        nextMaintenanceDueDate: drone.nextMaintenanceDueDate,
+      }),
+    }));
 
     return {
       data,
@@ -96,9 +156,13 @@ export class DronesService {
     };
   }
 
-  async findOne(id: string, ownerId: string) {
+  async findOne(
+    id: string,
+    fleetOwnerId: string,
+    viewerRole: OperatorRole = OperatorRole.PILOT,
+  ) {
     const drone = await this.dronesRepository.findOne({
-      where: { id, ownerId },
+      where: { id, ownerId: fleetOwnerId },
       relations: {
         missions: true,
         maintenanceLogs: true,
@@ -113,8 +177,12 @@ export class DronesService {
       throw new NotFoundException(`Drone ${id} was not found.`);
     }
 
+    const maintenanceLogs =
+      viewerRole === OperatorRole.PILOT ? [] : (drone.maintenanceLogs ?? []);
+
     return {
       ...drone,
+      maintenanceLogs,
       maintenanceDue: isMaintenanceDue({
         totalFlightHours: drone.totalFlightHours,
         flightHoursAtLastMaintenance: drone.flightHoursAtLastMaintenance,
@@ -123,49 +191,27 @@ export class DronesService {
     };
   }
 
-  async update(id: string, updateDroneDto: UpdateDroneDto, ownerId: string) {
+  async update(
+    id: string,
+    updateDroneDto: UpdateDroneDto,
+    fleetOwnerId: string,
+    actorUserId: string,
+  ) {
     const drone = await this.dronesRepository.findOne({
-      where: { id, ownerId },
+      where: { id, ownerId: fleetOwnerId },
     });
 
     if (!drone) {
       throw new NotFoundException(`Drone ${id} was not found.`);
     }
 
-    if (
-      updateDroneDto.serialNumber &&
-      updateDroneDto.serialNumber !== drone.serialNumber
-    ) {
-      const existingDrone = await this.dronesRepository.findOne({
-        where: {
-          serialNumber: updateDroneDto.serialNumber,
-          ownerId,
-          id: Not(id),
-        },
-      });
-
-      if (existingDrone) {
-        throw new ConflictException(
-          'A drone with this serial number already exists.',
-        );
-      }
-    }
-
-    if (updateDroneDto.status === DroneStatus.RETIRED) {
-      const activeMission = await this.missionsRepository.findOne({
-        where: {
-          droneId: id,
-          status: In([
-            MissionStatus.PLANNED,
-            MissionStatus.PRE_FLIGHT_CHECK,
-            MissionStatus.IN_PROGRESS,
-          ]),
-        },
-        order: { plannedStart: 'ASC' },
-      });
-
-      assertDroneCanBeRetired(activeMission);
-    }
+    await this.assertSerialNumberAvailableForUpdate(
+      id,
+      fleetOwnerId,
+      drone.serialNumber,
+      updateDroneDto.serialNumber,
+    );
+    await this.assertRetiredAllowedIfRequested(id, updateDroneDto.status);
 
     const lastMaintenanceDate = updateDroneDto.lastMaintenanceDate
       ? parseIsoDateOrThrow(
@@ -184,26 +230,31 @@ export class DronesService {
       flightHoursAtLastMaintenance,
     );
 
-    Object.assign(drone, {
-      serialNumber: updateDroneDto.serialNumber ?? drone.serialNumber,
-      model: updateDroneDto.model ?? drone.model,
-      status: updateDroneDto.status ?? drone.status,
+    this.applyDroneUpdateFields(drone, updateDroneDto, {
+      lastMaintenanceDate,
       totalFlightHours,
       flightHoursAtLastMaintenance,
-      lastMaintenanceDate,
-      nextMaintenanceDueDate: calculateNextMaintenanceDueDate(
-        lastMaintenanceDate,
-        totalFlightHours,
-        flightHoursAtLastMaintenance,
-      ),
     });
 
-    return this.dronesRepository.save(drone);
+    if (
+      updateDroneDto.status === DroneStatus.AVAILABLE &&
+      isMaintenanceDue(drone)
+    ) {
+      throw new BadRequestException(
+        'Drone cannot be set to AVAILABLE because maintenance is overdue. Please log a maintenance completion instead.',
+      );
+    }
+
+    const saved = await this.dronesRepository.save(drone);
+    void this.auditService
+      .record(actorUserId, 'DRONE_UPDATED', 'Drone', saved.id, {})
+      .catch(() => undefined);
+    return saved;
   }
 
-  async remove(id: string, ownerId: string) {
+  async remove(id: string, fleetOwnerId: string, actorUserId: string) {
     const drone = await this.dronesRepository.findOne({
-      where: { id, ownerId },
+      where: { id, ownerId: fleetOwnerId },
     });
 
     if (!drone) {
@@ -221,7 +272,84 @@ export class DronesService {
     assertDroneCanBeDeleted(relatedMissionCount, relatedMaintenanceLogCount);
 
     await this.dronesRepository.remove(drone);
+    void this.auditService
+      .record(actorUserId, 'DRONE_DELETED', 'Drone', id, {
+        serialNumber: drone.serialNumber,
+      })
+      .catch(() => undefined);
 
     return { success: true };
+  }
+
+  private async assertSerialNumberAvailableForUpdate(
+    droneId: string,
+    ownerId: string,
+    currentSerial: string,
+    nextSerial: string | undefined,
+  ) {
+    if (!nextSerial || nextSerial === currentSerial) {
+      return;
+    }
+
+    const existingDrone = await this.dronesRepository.findOne({
+      where: {
+        serialNumber: nextSerial,
+        ownerId,
+        id: Not(droneId),
+      },
+    });
+
+    if (existingDrone) {
+      throw new ConflictException(
+        'A drone with this serial number already exists.',
+      );
+    }
+  }
+
+  private async assertRetiredAllowedIfRequested(
+    droneId: string,
+    nextStatus: DroneStatus | undefined,
+  ) {
+    if (nextStatus !== DroneStatus.RETIRED) {
+      return;
+    }
+
+    const activeMission = await this.missionsRepository.findOne({
+      where: {
+        droneId,
+        status: In([
+          MissionStatus.PLANNED,
+          MissionStatus.PRE_FLIGHT_CHECK,
+          MissionStatus.IN_PROGRESS,
+        ]),
+      },
+      order: { plannedStart: 'ASC' },
+    });
+
+    assertDroneCanBeRetired(activeMission);
+  }
+
+  private applyDroneUpdateFields(
+    drone: Drone,
+    updateDroneDto: UpdateDroneDto,
+    resolved: {
+      lastMaintenanceDate: Date;
+      totalFlightHours: number;
+      flightHoursAtLastMaintenance: number;
+    },
+  ) {
+    Object.assign(drone, {
+      serialNumber: updateDroneDto.serialNumber ?? drone.serialNumber,
+      model: updateDroneDto.model ?? drone.model,
+      status: updateDroneDto.status ?? drone.status,
+      totalFlightHours: resolved.totalFlightHours,
+      flightHoursAtLastMaintenance: resolved.flightHoursAtLastMaintenance,
+      lastMaintenanceDate: resolved.lastMaintenanceDate,
+      nextMaintenanceDueDate: calculateNextMaintenanceDueDate(
+        resolved.lastMaintenanceDate,
+        resolved.totalFlightHours,
+        resolved.flightHoursAtLastMaintenance,
+      ),
+    });
   }
 }

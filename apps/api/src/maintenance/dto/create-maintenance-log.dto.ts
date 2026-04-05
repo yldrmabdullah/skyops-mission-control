@@ -1,10 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   MaxLength,
   Min,
@@ -42,4 +45,14 @@ export class CreateMaintenanceLogDto {
   @IsNumber({ maxDecimalPlaces: 1 })
   @Min(0)
   flightHoursAtMaintenance!: number;
+
+  @ApiProperty({
+    required: false,
+    description: 'External links to evidence (max 5)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsUrl({}, { each: true })
+  attachmentUrls?: string[];
 }

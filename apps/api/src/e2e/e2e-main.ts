@@ -1,7 +1,11 @@
-import { ConflictException, ValidationPipe } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DataSource } from 'typeorm';
 import { HttpExceptionFilter } from '../common/filters/http-exception.filter';
-import { AuthService } from '../auth/auth.service';
+import { User } from '../auth/entities/user.entity';
+import { defaultNotificationPreferences } from '../auth/notification-preferences.types';
+import { OperatorRole } from '../auth/operator-role.enum';
 import { E2eModule } from './e2e.module';
 
 async function bootstrap() {
@@ -18,18 +22,28 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  const authService = app.get(AuthService);
+  const dataSource = app.get(DataSource);
+  const userRepo = dataSource.getRepository(User);
+  const e2eEmail = 'e2e@skyops.test';
+  let e2eUser = await userRepo.findOne({ where: { email: e2eEmail } });
 
-  try {
-    await authService.register({
-      email: 'e2e@skyops.test',
-      password: 'E2eTestPass1',
-      fullName: 'E2E Operator',
-    });
-  } catch (error) {
-    if (!(error instanceof ConflictException)) {
-      throw error;
-    }
+  if (!e2eUser) {
+    e2eUser = await userRepo.save(
+      userRepo.create({
+        email: e2eEmail,
+        passwordHash: await bcrypt.hash('E2eTestPass1', 12),
+        fullName: 'E2E Operator',
+        role: OperatorRole.MANAGER,
+        workspaceOwnerId: null,
+        mustChangePassword: false,
+        notificationPreferences: { ...defaultNotificationPreferences },
+      }),
+    );
+  } else {
+    e2eUser.role = OperatorRole.MANAGER;
+    e2eUser.workspaceOwnerId = null;
+    e2eUser.mustChangePassword = false;
+    await userRepo.save(e2eUser);
   }
 
   await app.listen(3000);

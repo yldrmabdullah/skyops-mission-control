@@ -28,6 +28,10 @@ services:
       DATABASE_USERNAME: postgres
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: skyops
+      # Migrations run on every API container start. Demo seed runs only when the users table is empty
+      # (fresh volume). Set DOCKER_FORCE_SEED=1 to re-run seed anyway. Set DOCKER_SKIP_SEED=1 to never seed.
+      # DOCKER_FORCE_SEED: "1"
+      # DOCKER_SKIP_SEED: "1"
     depends_on:
       postgres:
         condition: service_healthy

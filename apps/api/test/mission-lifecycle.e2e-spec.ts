@@ -69,12 +69,25 @@ describe('Mission lifecycle integration', () => {
     );
     ownerId = owner.id;
 
+    const auditService = { record: jest.fn().mockResolvedValue(undefined) };
+    const notificationsService = {
+      notifyScheduleConflictIfEnabled: jest.fn().mockResolvedValue(undefined),
+      notifyMaintenanceDueStub: jest.fn().mockResolvedValue(undefined),
+    };
+
     dronesService = new DronesService(
       droneRepository,
       missionRepository,
       maintenanceLogRepository,
+      auditService as never,
     );
-    missionsService = new MissionsService(missionRepository, droneRepository);
+    missionsService = new MissionsService(
+      dataSource,
+      missionRepository,
+      droneRepository,
+      auditService as never,
+      notificationsService as never,
+    );
   });
 
   afterEach(async () => {
@@ -91,6 +104,7 @@ describe('Mission lifecycle integration', () => {
         lastMaintenanceDate: '2026-03-01T00:00:00.000Z',
       },
       ownerId,
+      ownerId,
     );
 
     const mission = await missionsService.create(
@@ -104,6 +118,7 @@ describe('Mission lifecycle integration', () => {
         plannedEnd: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       },
       ownerId,
+      ownerId,
     );
 
     await missionsService.transition(
@@ -112,12 +127,14 @@ describe('Mission lifecycle integration', () => {
         status: MissionStatus.PRE_FLIGHT_CHECK,
       },
       ownerId,
+      ownerId,
     );
     await missionsService.transition(
       mission.id,
       {
         status: MissionStatus.IN_PROGRESS,
       },
+      ownerId,
       ownerId,
     );
     const completedMission = await missionsService.transition(
@@ -126,6 +143,7 @@ describe('Mission lifecycle integration', () => {
         status: MissionStatus.COMPLETED,
         flightHoursLogged: 2,
       },
+      ownerId,
       ownerId,
     );
 
