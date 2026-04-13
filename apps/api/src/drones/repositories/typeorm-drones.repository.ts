@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsOrder, FindOptionsWhere, ILike, Repository } from 'typeorm';
-import { Drone, DroneStatus } from '../entities/drone.entity';
+import { Drone, DroneModel, DroneStatus } from '../entities/drone.entity';
 import { IDronesRepository } from './drones.repository.interface';
 
 @Injectable()
@@ -31,6 +31,7 @@ export class TypeOrmDronesRepository implements IDronesRepository {
       skip: number;
       take: number;
       status?: DroneStatus;
+      model?: DroneModel;
       search?: string;
       order?: FindOptionsOrder<Drone>;
     },
@@ -38,6 +39,9 @@ export class TypeOrmDronesRepository implements IDronesRepository {
     const where: FindOptionsWhere<Drone> = { ownerId };
     if (options.status) {
       where.status = options.status;
+    }
+    if (options.model) {
+      where.model = options.model;
     }
     if (options.search) {
       where.serialNumber = ILike(`%${options.search}%`);

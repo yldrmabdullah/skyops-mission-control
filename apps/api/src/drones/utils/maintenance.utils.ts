@@ -12,6 +12,14 @@ function addDaysUTC(date: Date, days: number): Date {
   return d;
 }
 
+export function calculateDaysSinceLastMaintenance(
+  lastMaintenanceDate: Date,
+  currentDate = new Date(),
+): number {
+  const diffMs = currentDate.getTime() - lastMaintenanceDate.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
 /** Calendar-only branch: last maintenance + 90 days. */
 export function calculateCalendarMaintenanceDueDate(
   lastMaintenanceDate: Date,

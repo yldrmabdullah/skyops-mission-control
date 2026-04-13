@@ -55,12 +55,27 @@ export class ReportsService {
             ).toFixed(1),
           );
 
+    const averageFlightHoursBetweenMaintenance =
+      totalCount === 0
+        ? 0
+        : Number(
+            (
+              drones.reduce(
+                (sum, drone) =>
+                  sum +
+                  (drone.totalFlightHours - drone.flightHoursAtLastMaintenance),
+                0,
+              ) / totalCount
+            ).toFixed(1),
+          );
+
     return {
       totalDroneCount: totalCount,
       statusBreakdown,
       overdueMaintenance,
       missionsInNext24Hours: upcomingMissionsCount,
       averageFlightHoursPerDrone,
+      averageFlightHoursBetweenMaintenance,
     };
   }
 

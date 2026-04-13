@@ -13,7 +13,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { MaintenanceType } from '../entities/maintenance-log.entity';
 
 export class CreateMaintenanceLogDto {
@@ -26,6 +26,9 @@ export class CreateMaintenanceLogDto {
   type!: MaintenanceType;
 
   @ApiProperty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @MinLength(1)
   @MaxLength(120)
@@ -34,6 +37,7 @@ export class CreateMaintenanceLogDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 
   @ApiProperty()

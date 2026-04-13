@@ -24,6 +24,8 @@ import { CreateMissionUseCase } from './use-cases/create-mission.use-case';
 import { ListMissionsUseCase } from './use-cases/list-missions.use-case';
 import { GetMissionUseCase } from './use-cases/get-mission.use-case';
 import { UpdateMissionUseCase } from './use-cases/update-mission.use-case';
+import { CancelMissionDto } from './dto/cancel-mission.dto';
+import { CancelMissionUseCase } from './use-cases/cancel-mission.use-case';
 import { TransitionMissionUseCase } from './use-cases/transition-mission.use-case';
 import { Audit } from '../common/audit/audit.decorator';
 
@@ -36,6 +38,7 @@ export class MissionsController {
     private readonly listMissions: ListMissionsUseCase,
     private readonly getMission: GetMissionUseCase,
     private readonly updateMission: UpdateMissionUseCase,
+    private readonly cancelMission: CancelMissionUseCase,
     private readonly transitionMission: TransitionMissionUseCase,
   ) {}
 
@@ -93,5 +96,20 @@ export class MissionsController {
     @Body() transitionMissionDto: TransitionMissionDto,
   ) {
     return this.transitionMission.execute(id, transitionMissionDto);
+  }
+
+  @Patch(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a planned mission' })
+  @Audit({ action: 'MISSION_CANCELLED', entityType: 'Mission' })
+  @ApiResponse({ status: 200, description: 'Mission cancelled' })
+  @ApiResponse({ status: 400, description: 'Not editable state' })
+  @ApiResponse({ status: 403, description: 'Insufficient role' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @Roles(OperatorRole.PILOT, OperatorRole.MANAGER)
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() cancelMissionDto: CancelMissionDto,
+  ) {
+    return this.cancelMission.execute(id, cancelMissionDto);
   }
 }

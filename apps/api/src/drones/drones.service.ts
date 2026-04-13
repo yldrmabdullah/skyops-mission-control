@@ -100,6 +100,7 @@ export class DronesService {
       skip: (query.page - 1) * query.limit,
       take: query.limit,
       status: query.status,
+      model: query.model,
       order: resolveDroneListOrder(query),
       search: query.search,
     });

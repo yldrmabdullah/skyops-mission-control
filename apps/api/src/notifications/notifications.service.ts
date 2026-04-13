@@ -6,13 +6,12 @@ import {
   defaultNotificationPreferences,
   type NotificationPreferences,
 } from '../auth/notification-preferences.types';
-import { InAppNotification } from './entities/in-app-notification.entity';
+import { INotificationsRepository } from './repositories/notifications.repository.interface';
 
 @Injectable()
 export class NotificationsService {
   constructor(
-    @InjectRepository(InAppNotification)
-    private readonly notificationsRepository: Repository<InAppNotification>,
+    private readonly notificationsRepository: INotificationsRepository,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
   ) {}
@@ -59,17 +58,11 @@ export class NotificationsService {
   }
 
   async listUnread(userId: string, limit: number) {
-    return this.notificationsRepository.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+    return this.notificationsRepository.findByUserId(userId, limit);
   }
 
   async markRead(userId: string, id: string) {
-    const row = await this.notificationsRepository.findOne({
-      where: { id, userId },
-    });
+    const row = await this.notificationsRepository.findOne(id, userId);
     if (!row) {
       return null;
     }

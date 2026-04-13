@@ -55,6 +55,7 @@ describe('ReportsService', () => {
     const report = await service.getFleetHealthReport();
 
     expect(report.totalDroneCount).toBe(2);
+    expect(report.averageFlightHoursBetweenMaintenance).toBe(50);
     expect(report.statusBreakdown).toEqual({
       AVAILABLE: 1,
       MAINTENANCE: 1,

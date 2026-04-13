@@ -35,3 +35,14 @@ export class MissionNotFoundException extends DomainException {
     );
   }
 }
+
+export class InvalidMissionStatusTransitionException extends DomainException {
+  constructor(currentStatus: string, attemptedStatus: string) {
+    super(
+      `Cannot transition mission from ${currentStatus} to ${attemptedStatus}`,
+      'INVALID_MISSION_STATUS_TRANSITION',
+      HttpStatus.BAD_REQUEST,
+      { currentStatus, attemptedStatus },
+    );
+  }
+}

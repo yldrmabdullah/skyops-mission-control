@@ -1,6 +1,7 @@
 import {
   DRONE_SERIAL_NUMBER_REGEX,
   calculateCalendarMaintenanceDueDate,
+  calculateDaysSinceLastMaintenance,
   calculateFlightHoursSinceMaintenance,
   calculateNextMaintenanceDueDate,
   isMaintenanceDue,
@@ -14,6 +15,12 @@ describe('maintenance utils', () => {
     expect(
       calculateCalendarMaintenanceDueDate(lastMaintenanceDate).toISOString(),
     ).toBe('2026-04-01T00:00:00.000Z');
+  });
+
+  it('calculates days since last maintenance', () => {
+    const last = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-04-01T00:00:00.000Z');
+    expect(calculateDaysSinceLastMaintenance(last, now)).toBe(90);
   });
 
   it('picks the earlier of calendar due and estimated hour-based due when hours are low', () => {

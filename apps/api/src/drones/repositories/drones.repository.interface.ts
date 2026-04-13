@@ -1,5 +1,5 @@
 import type { FindOptionsOrder } from 'typeorm';
-import { Drone, DroneStatus } from '../entities/drone.entity';
+import { Drone, DroneModel, DroneStatus } from '../entities/drone.entity';
 
 export abstract class IDronesRepository {
   abstract findOne(id: string, ownerId: string): Promise<Drone | null>;
@@ -13,6 +13,7 @@ export abstract class IDronesRepository {
       skip: number;
       take: number;
       status?: DroneStatus;
+      model?: DroneModel;
       search?: string;
       order?: FindOptionsOrder<Drone>;
     },

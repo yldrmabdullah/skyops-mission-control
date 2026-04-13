@@ -13,6 +13,7 @@ import { ListMissionsUseCase } from './use-cases/list-missions.use-case';
 import { TransitionMissionUseCase } from './use-cases/transition-mission.use-case';
 import { UpdateMissionUseCase } from './use-cases/update-mission.use-case';
 import { GetMissionUseCase } from './use-cases/get-mission.use-case';
+import { CancelMissionUseCase } from './use-cases/cancel-mission.use-case';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { GetMissionUseCase } from './use-cases/get-mission.use-case';
     TransitionMissionUseCase,
     UpdateMissionUseCase,
     GetMissionUseCase,
+    CancelMissionUseCase,
   ],
   exports: [
     IMissionsRepository,
@@ -41,6 +43,7 @@ import { GetMissionUseCase } from './use-cases/get-mission.use-case';
     TransitionMissionUseCase,
     UpdateMissionUseCase,
     GetMissionUseCase,
+    CancelMissionUseCase,
   ],
 })
 export class MissionsModule {}

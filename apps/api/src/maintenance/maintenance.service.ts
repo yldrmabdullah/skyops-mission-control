@@ -19,6 +19,12 @@ import { ListMaintenanceLogsQueryDto } from './dto/list-maintenance-logs-query.d
 import { extname, join, basename } from 'path';
 import { randomUUID } from 'crypto';
 import { mkdir, writeFile } from 'fs/promises';
+import {
+  DroneInMissionException,
+  FlightHourMismatchException,
+} from './exceptions/maintenance-specific.exceptions';
+import { calculateNextMaintenanceDueDate } from '../drones/utils/maintenance.utils';
+import { resolveDroneStatusAfterMaintenance } from '../drones/utils/drone-rules';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'maintenance');
 const FLIGHT_HOUR_TOLERANCE = 0.5;
@@ -68,6 +74,17 @@ export class MaintenanceService {
     });
 
     const saved = await this.dataSource.transaction(async (manager) => {
+      drone.lastMaintenanceDate = new Date(createMaintenanceLogDto.performedAt);
+      drone.flightHoursAtLastMaintenance =
+        createMaintenanceLogDto.flightHoursAtMaintenance;
+      drone.nextMaintenanceDueDate = calculateNextMaintenanceDueDate(
+        drone.lastMaintenanceDate,
+        drone.totalFlightHours,
+        drone.flightHoursAtLastMaintenance,
+      );
+      drone.status = resolveDroneStatusAfterMaintenance(drone.status);
+
+      await manager.save(drone);
       return manager.save(maintenanceLog);
     });
 
@@ -79,17 +96,17 @@ export class MaintenanceService {
     dto: CreateMaintenanceLogDto,
   ) {
     if (drone.status === DroneStatus.IN_MISSION) {
-      throw new BadRequestException(
-        'A drone currently in mission cannot receive a maintenance log.',
-      );
+      throw new DroneInMissionException(drone.id);
     }
 
     if (
       Math.abs(drone.totalFlightHours - dto.flightHoursAtMaintenance) >
       FLIGHT_HOUR_TOLERANCE
     ) {
-      throw new BadRequestException(
-        'Recorded flight hours at maintenance must be consistent with the drone total flight hours.',
+      throw new FlightHourMismatchException(
+        drone.id,
+        drone.totalFlightHours,
+        dto.flightHoursAtMaintenance,
       );
     }
   }

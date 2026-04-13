@@ -5,10 +5,11 @@ import { User } from '../auth/entities/user.entity';
 import { OperatorRole } from '../auth/operator-role.enum';
 import { InAppNotification } from './entities/in-app-notification.entity';
 import { NotificationsService } from './notifications.service';
+import { INotificationsRepository } from './repositories/notifications.repository.interface';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
-  let repository: Repository<InAppNotification>;
+  let repository: INotificationsRepository;
   let userRepository: Repository<User>;
 
   beforeEach(async () => {
@@ -16,11 +17,11 @@ describe('NotificationsService', () => {
       providers: [
         NotificationsService,
         {
-          provide: getRepositoryToken(InAppNotification),
+          provide: INotificationsRepository,
           useValue: {
             create: jest.fn().mockReturnValue({}),
             save: jest.fn(),
-            find: jest.fn().mockResolvedValue([]),
+            findByUserId: jest.fn().mockResolvedValue([]),
             findOne: jest.fn(),
           },
         },
@@ -34,9 +35,7 @@ describe('NotificationsService', () => {
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
-    repository = module.get<Repository<InAppNotification>>(
-      getRepositoryToken(InAppNotification),
-    );
+    repository = module.get<INotificationsRepository>(INotificationsRepository);
     userRepository = module.get<Repository<User>>(getRepositoryToken(User));
   });
 

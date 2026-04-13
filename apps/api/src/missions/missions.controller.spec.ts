@@ -5,6 +5,7 @@ import { ListMissionsUseCase } from './use-cases/list-missions.use-case';
 import { GetMissionUseCase } from './use-cases/get-mission.use-case';
 import { UpdateMissionUseCase } from './use-cases/update-mission.use-case';
 import { TransitionMissionUseCase } from './use-cases/transition-mission.use-case';
+import { CancelMissionUseCase } from './use-cases/cancel-mission.use-case';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
 import { TransitionMissionDto } from './dto/transition-mission.dto';
@@ -17,6 +18,7 @@ describe('MissionsController', () => {
   let listMissions: ListMissionsUseCase;
   let getMission: GetMissionUseCase;
   let updateMission: UpdateMissionUseCase;
+  let cancelMission: CancelMissionUseCase;
   let transitionMission: TransitionMissionUseCase;
 
   const createDto: CreateMissionDto = {
@@ -37,6 +39,7 @@ describe('MissionsController', () => {
         { provide: ListMissionsUseCase, useValue: { execute: jest.fn() } },
         { provide: GetMissionUseCase, useValue: { execute: jest.fn() } },
         { provide: UpdateMissionUseCase, useValue: { execute: jest.fn() } },
+        { provide: CancelMissionUseCase, useValue: { execute: jest.fn() } },
         { provide: TransitionMissionUseCase, useValue: { execute: jest.fn() } },
       ],
     }).compile();
@@ -46,6 +49,7 @@ describe('MissionsController', () => {
     listMissions = module.get<ListMissionsUseCase>(ListMissionsUseCase);
     getMission = module.get<GetMissionUseCase>(GetMissionUseCase);
     updateMission = module.get<UpdateMissionUseCase>(UpdateMissionUseCase);
+    cancelMission = module.get<CancelMissionUseCase>(CancelMissionUseCase);
     transitionMission = module.get<TransitionMissionUseCase>(
       TransitionMissionUseCase,
     );
@@ -71,5 +75,10 @@ describe('MissionsController', () => {
     };
     await controller.transition('m1', transitionDto);
     expect(transitionMission.execute).toHaveBeenCalledWith('m1', transitionDto);
+
+    await controller.cancel('m1', { reason: 'Aborted' });
+    expect(cancelMission.execute).toHaveBeenCalledWith('m1', {
+      reason: 'Aborted',
+    });
   });
 });

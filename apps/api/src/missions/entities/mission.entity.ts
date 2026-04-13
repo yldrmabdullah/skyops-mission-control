@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Drone } from '../../drones/entities/drone.entity';
 import { numericTransformer } from '../../database/numeric.transformer';
+import { InvalidMissionStatusTransitionException } from '../exceptions/mission-specific.exceptions';
 
 export enum MissionType {
   WIND_TURBINE_INSPECTION = 'WIND_TURBINE_INSPECTION',
@@ -93,8 +94,9 @@ export class Mission {
 
   assertCanTransitionTo(nextStatus: MissionStatus) {
     if (!MISSION_TRANSITIONS[this.status].includes(nextStatus)) {
-      throw new Error(
-        `Mission cannot transition from ${this.status} to ${nextStatus}.`,
+      throw new InvalidMissionStatusTransitionException(
+        this.status,
+        nextStatus,
       );
     }
   }
